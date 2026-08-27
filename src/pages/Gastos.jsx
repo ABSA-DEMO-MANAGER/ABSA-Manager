@@ -6,10 +6,12 @@ import {
   money, fechaCorta, hoyISO, TIPOS, UNIDADES, ESTATUS_PAGO,
 } from '../lib/format';
 import { urlFirmada } from '../lib/storage';
+import SelectorProveedor from '../components/SelectorProveedor';
 import {
   Card, Tabla, Boton, Campo, Input, Select, Textarea, Modal,
   Cargando, Aviso, Badge, Stat,
 } from '../components/ui';
+import PeriodoFiltro from '../components/PeriodoFiltro';
 
 const VACIO = {
   fecha: hoyISO(), sucursal_id: '', concepto: '', tipo: 'insumo',
@@ -23,7 +25,7 @@ const VACIO = {
 const TIPOS_CAPTURA_DIRECTA = ['remodelacion', 'insumo', 'viaticos', 'otro'];
 
 export default function Gastos() {
-  const { puedeEditar } = useAuth();
+  const { puedeGestionar } = useAuth();
   const [params, setParams] = useSearchParams();
 
   const [gastos, setGastos] = useState(null);
@@ -39,6 +41,7 @@ export default function Gastos() {
   const [fSucursal, setFSucursal] = useState(params.get('sucursal') ?? '');
   const [fTipo, setFTipo] = useState('');
   const [busca, setBusca] = useState('');
+  const [periodo, setPeriodo] = useState(null);
   const soloRevisar = params.get('revisar') === '1';
 
   async function cargar() {
@@ -60,9 +63,10 @@ export default function Gastos() {
     () => Object.fromEntries(proveedores.map((p) => [p.id, p])), [proveedores]);
 
   const filtrados = useMemo(() => {
-    if (!gastos) return [];
+    if (!gastos || !periodo) return [];
     const q = busca.trim().toLowerCase();
     return gastos.filter((g) =>
+      g.fecha >= periodo.desde && g.fecha <= periodo.hasta &&
       (!fSucursal || String(g.sucursal_id) === fSucursal) &&
       (!fTipo || g.tipo === fTipo) &&
       (!soloRevisar || g.requiere_revision) &&
@@ -70,7 +74,7 @@ export default function Gastos() {
         g.concepto?.toLowerCase().includes(q) ||
         provById[g.proveedor_id]?.nombre?.toLowerCase().includes(q))
     );
-  }, [gastos, fSucursal, fTipo, busca, soloRevisar, provById]);
+  }, [gastos, periodo, fSucursal, fTipo, busca, soloRevisar, provById]);
 
   const total = filtrados.reduce((a, g) => a + Number(g.monto), 0);
 
@@ -143,7 +147,7 @@ export default function Gastos() {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <Badge color="var(--serious)">Por revisar</Badge>
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{g.nota_revision}</span>
-              {puedeEditar && (
+              {puedeGestionar && (
                 <button onClick={() => resolverRevision(g)} className="text-xs underline"
                         style={{ color: 'var(--text-secondary)' }}>
                   Marcar revisado
@@ -175,12 +179,16 @@ export default function Gastos() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Gastos</h1>
           <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {filtrados.length} de {gastos.length} movimientos
+            {periodo ? `${filtrados.length} de ${gastos.length} movimientos` : 'Cargando…'}
           </p>
         </div>
-        {puedeEditar && <Boton onClick={() => { setForm(VACIO); setFormError(null); setModal(true); }}>+ Registrar gasto</Boton>}
+        {puedeGestionar && <Boton onClick={() => { setForm(VACIO); setFormError(null); setModal(true); }}>+ Registrar gasto</Boton>}
       </div>
 
+      <PeriodoFiltro onChange={setPeriodo} />
+
+      {!periodo ? <Cargando /> : (
+      <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Total filtrado" value={money(total)} hint={`${filtrados.length} movimientos`} />
         <Stat label="Promedio" value={money(filtrados.length ? total / filtrados.length : 0)} />
@@ -212,8 +220,10 @@ export default function Gastos() {
           </label>
         </div>
 
-        <Tabla columnas={columnas} filas={filtrados} vacio="Ningún gasto coincide con el filtro." />
+        <Tabla columnas={columnas} filas={filtrados} vacio="Ningún gasto coincide con el filtro en este periodo." />
       </Card>
+      </>
+      )}
 
       {/* ---------------- Alta ---------------- */}
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Registrar gasto">
@@ -252,11 +262,9 @@ export default function Gastos() {
               </Select>
             </Campo>
             <Campo label="Proveedor">
-              <Select value={form.proveedor_id}
-                      onChange={(e) => setForm({ ...form, proveedor_id: e.target.value })}>
-                <option value="">Sin proveedor</option>
-                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Select>
+              <SelectorProveedor proveedores={proveedores} value={form.proveedor_id}
+                                 onChange={(v) => setForm({ ...form, proveedor_id: v })}
+                                 onCreado={(nuevo) => setProveedores((prev) => [...prev, nuevo])} />
             </Campo>
           </div>
 

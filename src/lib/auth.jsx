@@ -64,10 +64,15 @@ export function AuthProvider({ children }) {
     return () => { vivo = false; };
   }, [sesion]);
 
-  const puedeEditar = perfil?.rol === 'admin' || perfil?.rol === 'coordinador';
+  // esAdmin: dinero (presupuestos, caja chica), sucursales, y alta/edicion
+  //   directa de activos.
+  // puedeGestionar: operacion del dia a dia (ordenes, gastos, proveedores) —
+  //   lo tienen admin y usuario por igual.
+  const esAdmin = perfil?.rol === 'admin';
+  const puedeGestionar = esAdmin || perfil?.rol === 'usuario';
 
   return (
-    <AuthCtx.Provider value={{ sesion, perfil, cargando, puedeEditar }}>
+    <AuthCtx.Provider value={{ sesion, perfil, cargando, esAdmin, puedeGestionar }}>
       {children}
     </AuthCtx.Provider>
   );

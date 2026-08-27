@@ -1,36 +1,47 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { money, pct } from '../lib/format';
-import { Cargando, Aviso, Badge, Progreso } from '../components/ui';
+import { useAuth } from '../lib/auth';
+import { money, pct, hoyISO } from '../lib/format';
+import { Cargando, Aviso, Badge, Progreso, Boton, Modal, Campo, Input } from '../components/ui';
+import { rangoMensual } from '../components/PeriodoFiltro';
 
-const ANIO = 2026;
+const FORM_VACIO = { codigo: '', nombre: '', ciudad: '' };
 
 export default function Sucursales() {
   const navigate = useNavigate();
+  const { esAdmin } = useAuth();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [verCerradas, setVerCerradas] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const [s, p, g, a] = await Promise.all([
-        supabase.from('sucursales').select('id, codigo, nombre, ciudad, activa').order('codigo'),
-        supabase.from('presupuestos').select('sucursal_id, monto_aprobado').eq('anio', ANIO),
-        supabase.from('gastos').select('sucursal_id, monto, fecha'),
-        supabase.from('activos').select('sucursal_id'),
-      ]);
-      const err = s.error || p.error || g.error || a.error;
-      if (err) { setError(err.message); return; }
-      setD({ sucursales: s.data, presupuestos: p.data, gastos: g.data, activos: a.data });
-    })();
-  }, []);
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState(FORM_VACIO);
+  const [guardando, setGuardando] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  async function cargar() {
+    const [s, p, g, a] = await Promise.all([
+      supabase.from('sucursales').select('id, codigo, nombre, ciudad, activa').order('codigo'),
+      supabase.from('presupuestos').select('sucursal_id, anio, mes, monto_aprobado'),
+      supabase.from('gastos').select('sucursal_id, monto, fecha'),
+      supabase.from('activos').select('sucursal_id'),
+    ]);
+    const err = s.error || p.error || g.error || a.error;
+    if (err) { setError(err.message); return; }
+    setD({ sucursales: s.data, presupuestos: p.data, gastos: g.data, activos: a.data });
+  }
+  useEffect(() => { cargar(); }, []);
 
   const tarjetas = useMemo(() => {
     if (!d) return [];
-    const pres = Object.fromEntries(d.presupuestos.map((p) => [p.sucursal_id, p]));
+    const hoy = hoyISO();
+    const anioActual = +hoy.slice(0, 4), mesActual = +hoy.slice(5, 7);
+    const { desde, hasta } = rangoMensual(anioActual, mesActual);
+    const pres = Object.fromEntries(
+      d.presupuestos.filter((p) => p.anio === anioActual && p.mes === mesActual).map((p) => [p.sucursal_id, p]));
     return d.sucursales.map((s) => {
-      const gs = d.gastos.filter((g) => g.sucursal_id === s.id && g.fecha?.startsWith(String(ANIO)));
+      const gs = d.gastos.filter((g) => g.sucursal_id === s.id && g.fecha >= desde && g.fecha <= hasta);
       const ejercido = gs.reduce((a, g) => a + Number(g.monto), 0);
       const presupuesto = Number(pres[s.id]?.monto_aprobado ?? 0);
       return {
@@ -42,6 +53,29 @@ export default function Sucursales() {
       };
     });
   }, [d]);
+
+  function abrirNueva() {
+    setForm(FORM_VACIO);
+    setFormError(null); setModal(true);
+  }
+
+  async function guardar(e) {
+    e.preventDefault();
+    setFormError(null);
+    if (!form.codigo.trim()) return setFormError('El código es obligatorio (ej. GDL, HMO).');
+    if (!form.nombre.trim()) return setFormError('El nombre es obligatorio.');
+
+    setGuardando(true);
+    const { error: err } = await supabase.from('sucursales').insert({
+      codigo: form.codigo.trim().toUpperCase(),
+      nombre: form.nombre.trim(),
+      ciudad: form.ciudad.trim() || null,
+      activa: true,
+    });
+    setGuardando(false);
+    if (err) return setFormError(err.message.includes('duplicate') ? 'Ya existe una sucursal con ese código.' : err.message);
+    setModal(false); cargar();
+  }
 
   if (error) return <Aviso tono="critical">No se pudieron cargar las sucursales: {error}</Aviso>;
   if (!d) return <Cargando />;
@@ -58,12 +92,15 @@ export default function Sucursales() {
             Elige una sucursal para ver sus activos, presupuesto y gasto
           </p>
         </div>
-        {cerradas.length > 0 && (
-          <button onClick={() => setVerCerradas(!verCerradas)} className="text-xs underline"
-                  style={{ color: 'var(--text-secondary)' }}>
-            {verCerradas ? 'Ocultar cerradas' : `Ver también cerradas (${cerradas.length})`}
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {cerradas.length > 0 && (
+            <button onClick={() => setVerCerradas(!verCerradas)} className="text-xs underline"
+                    style={{ color: 'var(--text-secondary)' }}>
+              {verCerradas ? 'Ocultar cerradas' : `Ver también cerradas (${cerradas.length})`}
+            </button>
+          )}
+          {esAdmin && <Boton onClick={abrirNueva}>+ Nueva sucursal</Boton>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -127,6 +164,27 @@ export default function Sucursales() {
           </button>
         ))}
       </div>
+
+      <Modal abierto={modal} onClose={() => setModal(false)} titulo="Nueva sucursal">
+        <form onSubmit={guardar} className="space-y-3">
+          <Campo label="Código" required hint="Corto, ej. GDL, HMO, CUU">
+            <Input value={form.codigo} required
+                   onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
+          </Campo>
+          <Campo label="Nombre" required>
+            <Input value={form.nombre} required
+                   onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          </Campo>
+          <Campo label="Ciudad">
+            <Input value={form.ciudad} onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
+          </Campo>
+          {formError && <Aviso tono="critical">{formError}</Aviso>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Boton type="button" variant="ghost" onClick={() => setModal(false)}>Cancelar</Boton>
+            <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Crear'}</Boton>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -75,3 +75,9 @@ export const CRITICIDAD = {
   B: { label: 'B — importante', color: 'var(--series-3)' },
   C: { label: 'C — menor', color: 'var(--text-muted)' },
 };
+
+export const COBERTURA = {
+  local: 'Local',
+  regional: 'Regional',
+  nacional: 'Nacional',
+};

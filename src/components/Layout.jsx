@@ -9,13 +9,15 @@ const NAV = [
   { to: '/gastos',      label: 'Gastos',     icono: '$' },
   { to: '/plan',        label: 'Plan',       icono: '☑' },
   { to: '/activos',     label: 'Activos',    icono: '⚙' },
+  { to: '/proveedores', label: 'Proveedores', icono: '⚒' },
 ];
 
-const ROLES = { admin: 'Administrador', coordinador: 'Coordinador', tecnico: 'Técnico', consulta: 'Consulta' };
+const ROLES = { admin: 'Administrador', usuario: 'Usuario', consulta: 'Consulta' };
 
 export default function Layout() {
-  const { perfil } = useAuth();
+  const { perfil, esAdmin } = useAuth();
   const [menu, setMenu] = useState(false);
+  const nav = esAdmin ? [...NAV, { to: '/usuarios', label: 'Usuarios', icono: '☺' }] : NAV;
 
   const linkCls = ({ isActive }) =>
     `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
@@ -60,7 +62,7 @@ export default function Layout() {
         </div>
 
         <div className="space-y-0.5">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/'} className={linkCls} style={linkStyle}
                      onClick={() => setMenu(false)}>
               <span className="w-4 text-center text-xs" aria-hidden="true">{n.icono}</span>

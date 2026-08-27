@@ -9,6 +9,7 @@ import {
   Card, Tabla, Boton, Campo, Input, Select, Textarea, Modal,
   Cargando, Aviso, Badge, Stat, FiltroChips, ArchivoInput,
 } from '../components/ui';
+import SelectorProveedor from '../components/SelectorProveedor';
 
 const COLOR_ESTATUS = {
   programada: 'var(--series-1)', en_proceso: 'var(--series-3)',
@@ -31,7 +32,7 @@ const FORM_FINAL_VACIO = {
 };
 
 export default function Plan() {
-  const { puedeEditar } = useAuth();
+  const { puedeGestionar } = useAuth();
   const [vista, setVista] = useState('activas');   // activas | historial | catalogo
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
@@ -82,6 +83,7 @@ export default function Plan() {
   }, [d]);
 
   const hoy = hoyISO();
+  const agregarProveedor = (nuevo) => setD((prev) => ({ ...prev, proveedores: [...prev.proveedores, nuevo] }));
 
   const activasBase = useMemo(() => {
     if (!d) return [];
@@ -283,21 +285,21 @@ export default function Plan() {
       render: (o) => o.duracion_estimada_horas ? `${o.duracion_estimada_horas} h` : '—' },
     ...(mostrarAccion ? [{ key: 'accion', header: '', nowrap: true, render: (o) => (
       <div className="flex items-center justify-end gap-2">
-        {o.estatus !== 'en_proceso' && puedeEditar && (
+        {o.estatus !== 'en_proceso' && puedeGestionar && (
           <button onClick={(e) => { e.stopPropagation(); iniciar(o); }}
                   className="rounded-lg border px-2.5 py-1 text-xs font-medium"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
             Iniciar
           </button>
         )}
-        {o.estatus === 'en_proceso' && puedeEditar && (
+        {o.estatus === 'en_proceso' && puedeGestionar && (
           <button onClick={(e) => { e.stopPropagation(); abrirFinalizar(o); }}
                   className="rounded-lg px-2.5 py-1 text-xs font-medium"
                   style={{ background: 'var(--series-1)', color: '#fff' }}>
             Finalizar
           </button>
         )}
-        {puedeEditar && (
+        {puedeGestionar && (
           <button onClick={(e) => { e.stopPropagation(); abrirEditar(o); }}
                   className="text-xs underline" style={{ color: 'var(--text-secondary)' }}>
             Editar
@@ -330,7 +332,7 @@ export default function Plan() {
             {d.planes.length} tareas tipo · {d.ordenes.length} órdenes de trabajo
           </p>
         </div>
-        {puedeEditar && <Boton onClick={() => abrirNueva()}>+ Nueva orden</Boton>}
+        {puedeGestionar && <Boton onClick={() => abrirNueva()}>+ Nueva orden</Boton>}
       </div>
 
       {d.ordenes.length === 0 && (
@@ -440,7 +442,7 @@ export default function Plan() {
               { key: 'frecuencia', header: 'Frecuencia', nowrap: true,
                 render: (p) => FRECUENCIAS[p.frecuencia] ?? p.frecuencia },
               { key: 'servicio', header: 'Ejecuta', nowrap: true, render: (p) => p.servicio ?? '—' },
-              ...(puedeEditar ? [{ key: 'accion', header: '', nowrap: true, render: (p) => (
+              ...(puedeGestionar ? [{ key: 'accion', header: '', nowrap: true, render: (p) => (
                   <button onClick={() => abrirNueva(p)} className="text-xs underline"
                           style={{ color: 'var(--series-1)' }}>Generar orden</button>) }] : []),
             ]}
@@ -526,10 +528,9 @@ export default function Plan() {
             </Campo>
           </div>
           <Campo label="Proveedor" hint="Opcional — también se puede asignar al finalizar">
-            <Select value={form.proveedor_id} onChange={(e) => setForm({ ...form, proveedor_id: e.target.value })}>
-              <option value="">Sin asignar</option>
-              {d.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
+            <SelectorProveedor proveedores={d.proveedores} value={form.proveedor_id}
+                               onChange={(v) => setForm({ ...form, proveedor_id: v })}
+                               onCreado={agregarProveedor} />
           </Campo>
           <Campo label="Notas">
             <Textarea rows={2} value={form.notas}
@@ -564,11 +565,9 @@ export default function Plan() {
               </Campo>
             </div>
             <Campo label="Proveedor" required>
-              <Select value={formFinal.proveedor_id} required
-                      onChange={(e) => setFormFinal({ ...formFinal, proveedor_id: e.target.value })}>
-                <option value="">Selecciona…</option>
-                {d.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Select>
+              <SelectorProveedor proveedores={d.proveedores} value={formFinal.proveedor_id} required
+                                 onChange={(v) => setFormFinal({ ...formFinal, proveedor_id: v })}
+                                 onCreado={agregarProveedor} />
             </Campo>
             <div className="grid grid-cols-2 gap-3">
               <Campo label="Se pagó con" required>

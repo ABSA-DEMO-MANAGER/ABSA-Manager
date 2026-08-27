@@ -7,18 +7,23 @@ import {
   Cargando, Aviso, Badge, Stat, Progreso, Input,
   Modal, Campo, Boton, FiltroChips,
 } from '../components/ui';
+import PeriodoFiltro, { rangoMensual } from '../components/PeriodoFiltro';
 
-const ANIO = 2026;
+const MESES_LARGO = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
 
 export default function SucursalDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { puedeEditar } = useAuth();
+  const { esAdmin } = useAuth();
 
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [busca, setBusca] = useState('');
   const [fCat, setFCat] = useState('');
+  const [periodo, setPeriodo] = useState(null);
 
   const [editPresupuesto, setEditPresupuesto] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -28,8 +33,8 @@ export default function SucursalDetalle() {
     const [s, p, g, a, c] = await Promise.all([
       supabase.from('sucursales').select('id, codigo, nombre, ciudad, activa, notas').eq('id', id).maybeSingle(),
       supabase.from('presupuestos')
-        .select('id, sucursal_id, monto_solicitado, monto_aprobado, notas')
-        .eq('anio', ANIO).eq('sucursal_id', id).maybeSingle(),
+        .select('id, anio, mes, monto_solicitado, monto_aprobado, notas')
+        .eq('sucursal_id', id),
       supabase.from('gastos').select('monto, fecha').eq('sucursal_id', id),
       supabase.from('activos')
         .select('id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, ultimo_servicio, fecha_instalacion, atributos, notas')
@@ -39,24 +44,33 @@ export default function SucursalDetalle() {
     const err = s.error || p.error || g.error || a.error || c.error;
     if (err) { setError(err.message); return; }
     if (!s.data) { setError('no-existe'); return; }
-    setD({ sucursal: s.data, presupuesto: p.data, gastos: g.data, activos: a.data, categorias: c.data });
+    setD({ sucursal: s.data, presupuestos: p.data, gastos: g.data, activos: a.data, categorias: c.data });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
   const catById = useMemo(() => Object.fromEntries((d?.categorias ?? []).map((c) => [c.id, c])), [d]);
 
+  const presupuestosDelPeriodo = useMemo(() => {
+    if (!d || !periodo) return [];
+    return d.presupuestos.filter((p) => {
+      const r = rangoMensual(p.anio, p.mes);
+      return r.desde <= periodo.hasta && r.hasta >= periodo.desde;
+    });
+  }, [d, periodo]);
+
   const stats = useMemo(() => {
-    if (!d) return null;
-    const delAnio = d.gastos.filter((g) => g.fecha?.startsWith(String(ANIO)));
-    const ejercido = delAnio.reduce((a, g) => a + Number(g.monto), 0);
-    const presupuesto = Number(d.presupuesto?.monto_aprobado ?? 0);
+    if (!d || !periodo) return null;
+    const enPeriodo = d.gastos.filter((g) => g.fecha >= periodo.desde && g.fecha <= periodo.hasta);
+    const ejercido = enPeriodo.reduce((a, g) => a + Number(g.monto), 0);
+    const presupuesto = presupuestosDelPeriodo.reduce((a, p) => a + Number(p.monto_aprobado ?? 0), 0);
     return {
       ejercido, presupuesto,
       disponible: presupuesto - ejercido,
       avance: presupuesto > 0 ? (ejercido / presupuesto) * 100 : null,
       criticos: d.activos.filter((a) => a.criticidad === 'A').length,
+      notas: [...new Set(presupuestosDelPeriodo.map((p) => p.notas).filter(Boolean))],
     };
-  }, [d]);
+  }, [d, periodo, presupuestosDelPeriodo]);
 
   const coinciden = (a, q) =>
     !q || [a.nombre, a.codigo, a.marca, a.modelo, a.ubicacion, a.serie]
@@ -79,9 +93,11 @@ export default function SucursalDetalle() {
   }, [d, busca, fCat]);
 
   function abrirEditPresupuesto() {
+    const fila = d.presupuestos.find((p) => p.anio === periodo.anio && p.mes === periodo.mes);
     setEditPresupuesto({
-      solicitado: d.presupuesto?.monto_solicitado ?? '',
-      aprobado: d.presupuesto?.monto_aprobado ?? '',
+      id: fila?.id ?? null, anio: periodo.anio, mes: periodo.mes,
+      solicitado: fila?.monto_solicitado ?? '', aprobado: fila?.monto_aprobado ?? '',
+      notas: fila?.notas ?? '',
     });
     setFormError(null);
   }
@@ -94,15 +110,25 @@ export default function SucursalDetalle() {
     if (aprobado !== null && (isNaN(aprobado) || aprobado < 0)) return setFormError('Monto aprobado inválido.');
 
     setGuardando(true);
-    const { error: err } = d.presupuesto
+    const { error: err } = editPresupuesto.id
       ? await supabase.from('presupuestos')
-          .update({ monto_aprobado: aprobado, monto_solicitado: solicitado })
-          .eq('id', d.presupuesto.id)
+          .update({ monto_aprobado: aprobado, monto_solicitado: solicitado, notas: editPresupuesto.notas.trim() || null })
+          .eq('id', editPresupuesto.id)
       : await supabase.from('presupuestos')
-          .insert({ sucursal_id: Number(id), anio: ANIO, monto_aprobado: aprobado, monto_solicitado: solicitado });
+          .insert({
+            sucursal_id: Number(id), anio: editPresupuesto.anio, mes: editPresupuesto.mes,
+            monto_aprobado: aprobado, monto_solicitado: solicitado, notas: editPresupuesto.notas.trim() || null,
+          });
     setGuardando(false);
     if (err) return setFormError(err.message);
     setEditPresupuesto(null); cargar();
+  }
+
+  async function alternarActiva() {
+    const accion = d.sucursal.activa ? 'cerrar' : 'reabrir';
+    if (!confirm(`¿Seguro que quieres ${accion} ${d.sucursal.nombre}? ${d.sucursal.activa ? 'Se ocultará de la lista principal pero conserva todo su historial.' : ''}`)) return;
+    await supabase.from('sucursales').update({ activa: !d.sucursal.activa }).eq('id', id);
+    cargar();
   }
 
   if (error === 'no-existe') {
@@ -145,17 +171,31 @@ export default function SucursalDetalle() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Boton variant="ghost" onClick={() => navigate(`/gastos?sucursal=${id}`)}>
             Ver gastos desglosados →
           </Boton>
-          {puedeEditar && (
-            <Boton variant="ghost" onClick={abrirEditPresupuesto}>Editar presupuesto</Boton>
+          {esAdmin && periodo?.modo === 'mes' && (
+            <Boton variant="ghost" onClick={abrirEditPresupuesto}>
+              Editar presupuesto de {MESES_LARGO[periodo.mes - 1]}
+            </Boton>
+          )}
+          {esAdmin && (
+            <Boton variant={sucursal.activa ? 'danger' : 'ghost'} onClick={alternarActiva}>
+              {sucursal.activa ? 'Cerrar sucursal' : 'Reabrir sucursal'}
+            </Boton>
           )}
         </div>
       </div>
 
-      {d.presupuesto?.notas && <Aviso tono="warning">{d.presupuesto.notas}</Aviso>}
+      <PeriodoFiltro inicial={{ modo: 'mes' }} onChange={setPeriodo} />
+
+      {!periodo || !stats ? <Cargando /> : (
+      <>
+      {stats.notas.length > 0 && stats.notas.map((n, i) => <Aviso key={i} tono="warning">{n}</Aviso>)}
+      {esAdmin && periodo.modo !== 'mes' && (
+        <Aviso>Cambia el periodo a "Mes" para poder editar el presupuesto de un mes específico.</Aviso>
+      )}
 
       <button
         onClick={() => navigate(`/gastos?sucursal=${id}`)}
@@ -174,6 +214,8 @@ export default function SucursalDetalle() {
 
       {stats.avance !== null && (
         <Progreso valor={stats.avance} tono={stats.avance > 100 ? 'critical' : stats.avance > 85 ? 'warning' : undefined} />
+      )}
+      </>
       )}
 
       {/* ---------------- Activos ---------------- */}
@@ -239,7 +281,7 @@ export default function SucursalDetalle() {
 
       {/* ---------------- Modal: editar presupuesto ---------------- */}
       <Modal abierto={!!editPresupuesto} onClose={() => setEditPresupuesto(null)}
-             titulo={`Presupuesto ${ANIO} — ${sucursal.nombre}`}>
+             titulo={editPresupuesto ? `Presupuesto de ${MESES_LARGO[editPresupuesto.mes - 1]} ${editPresupuesto.anio} — ${sucursal.nombre}` : ''}>
         {editPresupuesto && (
           <form onSubmit={guardarPresupuesto} className="space-y-3">
             <Campo label="Monto solicitado" hint="Lo que pidió el área de mantenimiento">
@@ -250,10 +292,14 @@ export default function SucursalDetalle() {
               <Input inputMode="decimal" value={editPresupuesto.aprobado}
                      onChange={(e) => setEditPresupuesto({ ...editPresupuesto, aprobado: e.target.value })} />
             </Campo>
+            <Campo label="Notas">
+              <Input value={editPresupuesto.notas}
+                     onChange={(e) => setEditPresupuesto({ ...editPresupuesto, notas: e.target.value })} />
+            </Campo>
             <div className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>
               <div className="flex justify-between">
-                <span style={{ color: 'var(--text-secondary)' }}>Ejercido</span>
-                <span className="tnum font-medium">{money(stats.ejercido)}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Ejercido este mes</span>
+                <span className="tnum font-medium">{money(stats?.ejercido ?? 0)}</span>
               </div>
               <div className="mt-1 flex justify-between">
                 <span style={{ color: 'var(--text-secondary)' }}>Activos registrados</span>

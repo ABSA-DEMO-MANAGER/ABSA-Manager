@@ -9,6 +9,8 @@ import Activos from './pages/Activos';
 import ActivoDetalle from './pages/ActivoDetalle';
 import Sucursales from './pages/Sucursales';
 import SucursalDetalle from './pages/SucursalDetalle';
+import Usuarios from './pages/Usuarios';
+import Proveedores from './pages/Proveedores';
 import { Cargando } from './components/ui';
 
 function Rutas() {
@@ -27,6 +29,8 @@ function Rutas() {
         <Route path="/activos/:id" element={<ActivoDetalle />} />
         <Route path="/sucursales" element={<Sucursales />} />
         <Route path="/sucursales/:id" element={<SucursalDetalle />} />
+        <Route path="/usuarios" element={<Usuarios />} />
+        <Route path="/proveedores" element={<Proveedores />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
     </Routes>

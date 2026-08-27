@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { subirArchivo, urlFirmada } from '../lib/storage';
+import SelectorProveedor from '../components/SelectorProveedor';
 import { useAuth } from '../lib/auth';
 import { money, fechaCorta, hoyISO, TIPOS, CRITICIDAD, ESTATUS_ORDEN } from '../lib/format';
 import {
@@ -23,7 +24,7 @@ const FORM_MANT_VACIO = {
 export default function ActivoDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { puedeEditar } = useAuth();
+  const { perfil, esAdmin, puedeGestionar } = useAuth();
 
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
@@ -39,7 +40,7 @@ export default function ActivoDetalle() {
   const [subiendoFoto, setSubiendoFoto] = useState(false);
 
   async function cargar() {
-    const [a, s, c, o, prov] = await Promise.all([
+    const [a, s, c, o, prov, cambios, perfiles] = await Promise.all([
       supabase.from('activos')
         .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, ultimo_servicio, fecha_instalacion, atributos, notas, foto_path')
         .eq('id', id).maybeSingle(),
@@ -49,8 +50,12 @@ export default function ActivoDetalle() {
         .select('id, tipo, tipo_falla, titulo, descripcion, criticidad, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, proveedor_id')
         .eq('activo_id', id).order('fecha_programada', { ascending: false, nullsFirst: false }),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
+      supabase.from('activos_cambios')
+        .select('id, tipo, datos, estatus, solicitado_por, solicitado_en, resuelto_por, resuelto_en, nota_resolucion')
+        .eq('activo_id', id).order('solicitado_en', { ascending: false }),
+      supabase.from('perfiles').select('id, nombre'),
     ]);
-    const err = a.error || s.error || c.error || o.error || prov.error;
+    const err = a.error || s.error || c.error || o.error || prov.error || cambios.error || perfiles.error;
     if (err) { setError(err.message); return; }
     if (!a.data) { setError('no-existe'); return; }
 
@@ -64,7 +69,10 @@ export default function ActivoDetalle() {
       gastos = g.data;
     }
 
-    setD({ activo: a.data, sucursales: s.data, categorias: c.data, ordenes: o.data, proveedores: prov.data, gastos });
+    setD({
+      activo: a.data, sucursales: s.data, categorias: c.data, ordenes: o.data, proveedores: prov.data, gastos,
+      cambios: cambios.data, perfiles: perfiles.data,
+    });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
@@ -76,6 +84,8 @@ export default function ActivoDetalle() {
   const sucById = useMemo(() => Object.fromEntries((d?.sucursales ?? []).map((s) => [s.id, s])), [d]);
   const catById = useMemo(() => Object.fromEntries((d?.categorias ?? []).map((c) => [c.id, c])), [d]);
   const provById = useMemo(() => Object.fromEntries((d?.proveedores ?? []).map((p) => [p.id, p])), [d]);
+  const perfilById = useMemo(() => Object.fromEntries((d?.perfiles ?? []).map((p) => [p.id, p])), [d]);
+  const cambioPendiente = useMemo(() => (d?.cambios ?? []).find((c) => c.estatus === 'pendiente'), [d]);
 
   const gastoPorOrden = useMemo(() => {
     const m = {};
@@ -158,7 +168,7 @@ export default function ActivoDetalle() {
         setSubiendoFoto(true);
         foto_path = await subirArchivo(formEditar.foto, `activos/${d.activo.id}`);
       }
-      const { error: err } = await supabase.from('activos').update({
+      const datos = {
         nombre: formEditar.nombre.trim(),
         codigo: formEditar.codigo.trim() || null,
         ubicacion: formEditar.ubicacion.trim() || null,
@@ -171,14 +181,40 @@ export default function ActivoDetalle() {
         categoria_id: formEditar.categoria_id ? Number(formEditar.categoria_id) : null,
         notas: formEditar.notas.trim() || null,
         foto_path,
-      }).eq('id', d.activo.id);
-      if (err) throw err;
+      };
+
+      if (esAdmin) {
+        const { error: err } = await supabase.from('activos').update(datos).eq('id', d.activo.id);
+        if (err) throw err;
+      } else {
+        const { error: err } = await supabase.from('activos_cambios').insert({
+          activo_id: d.activo.id, tipo: 'modificacion', datos, solicitado_por: perfil.id,
+        });
+        if (err) throw err;
+      }
       setModalEditar(false); cargar();
     } catch (err) {
       setFormError(err.message);
     } finally {
       setGuardando(false); setSubiendoFoto(false);
     }
+  }
+
+  async function resolverCambio(cambio, aprobar) {
+    if (!aprobar) {
+      const motivo = prompt('¿Por qué se rechaza este cambio? (opcional)') ?? '';
+      await supabase.from('activos_cambios')
+        .update({ estatus: 'rechazado', resuelto_por: perfil.id, resuelto_en: new Date().toISOString(), nota_resolucion: motivo || null })
+        .eq('id', cambio.id);
+      cargar();
+      return;
+    }
+    const { error: err } = await supabase.from('activos').update(cambio.datos).eq('id', d.activo.id);
+    if (err) { alert(err.message); return; }
+    await supabase.from('activos_cambios')
+      .update({ estatus: 'aprobado', resuelto_por: perfil.id, resuelto_en: new Date().toISOString() })
+      .eq('id', cambio.id);
+    cargar();
   }
 
   async function verArchivo(ruta) {
@@ -233,11 +269,19 @@ export default function ActivoDetalle() {
         </div>
       </div>
 
-      {puedeEditar && (
+      {puedeGestionar && (
         <div className="flex flex-wrap gap-2">
           <Boton onClick={abrirNuevoMantenimiento}>+ Nuevo mantenimiento</Boton>
-          <Boton variant="ghost" onClick={abrirEditar}>Editar datos</Boton>
+          <Boton variant="ghost" onClick={abrirEditar}>{esAdmin ? 'Editar datos' : 'Proponer cambio'}</Boton>
         </div>
+      )}
+
+      {cambioPendiente && (
+        <Aviso tono="warning">
+          {esAdmin
+            ? <>Hay un cambio pendiente de aprobar, propuesto por <strong>{perfilById[cambioPendiente.solicitado_por]?.nombre ?? 'alguien'}</strong>. Ábrelo abajo en "Historial de cambios" para aprobarlo o rechazarlo.</>
+            : <>Tienes un cambio propuesto esperando aprobación del administrador.</>}
+        </Aviso>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -311,6 +355,39 @@ export default function ActivoDetalle() {
         </Card>
       </div>
 
+      {d.cambios.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-base font-semibold tracking-tight">Historial de cambios</h2>
+          <Card className="!p-0">
+            <div className="p-4 sm:p-5">
+              <Tabla
+                columnas={[
+                  { key: 'solicitado_en', header: 'Solicitado', nowrap: true,
+                    render: (c) => fechaCorta(c.solicitado_en?.slice(0, 10)) },
+                  { key: 'tipo', header: 'Tipo', nowrap: true,
+                    render: (c) => c.tipo === 'alta' ? 'Alta' : 'Modificación' },
+                  { key: 'solicitado_por', header: 'Solicitó', render: (c) => perfilById[c.solicitado_por]?.nombre ?? '—' },
+                  { key: 'estatus', header: 'Estatus', nowrap: true, render: (c) => (
+                      <Badge color={c.estatus === 'aprobado' ? 'var(--good)' : c.estatus === 'rechazado' ? 'var(--critical)' : 'var(--series-3)'}>
+                        {c.estatus}
+                      </Badge>) },
+                  { key: 'resuelto_por', header: 'Resolvió', render: (c) => c.resuelto_por
+                      ? `${perfilById[c.resuelto_por]?.nombre ?? '—'} · ${fechaCorta(c.resuelto_en?.slice(0, 10))}` : '—' },
+                  ...(esAdmin ? [{ key: 'accion', header: '', nowrap: true, render: (c) => c.estatus === 'pendiente' && (
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => resolverCambio(c, true)} className="rounded-lg px-2.5 py-1 text-xs font-medium"
+                                style={{ background: 'var(--series-1)', color: '#fff' }}>Aprobar</button>
+                        <button onClick={() => resolverCambio(c, false)} className="rounded-lg border px-2.5 py-1 text-xs font-medium"
+                                style={{ borderColor: 'var(--border)', color: 'var(--critical)' }}>Rechazar</button>
+                      </div>) }] : []),
+                ]}
+                filas={d.cambios}
+              />
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* ---------------- Nuevo mantenimiento ---------------- */}
       <Modal abierto={modalMant} onClose={() => setModalMant(false)} titulo={`Nuevo mantenimiento — ${activo.nombre}`}>
         <form onSubmit={guardarMantenimiento} className="space-y-3">
@@ -356,10 +433,9 @@ export default function ActivoDetalle() {
             </Campo>
           </div>
           <Campo label="Proveedor" hint="Opcional — también se puede asignar al finalizar">
-            <Select value={formMant.proveedor_id} onChange={(e) => setFormMant({ ...formMant, proveedor_id: e.target.value })}>
-              <option value="">Sin asignar</option>
-              {d.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
+            <SelectorProveedor proveedores={d.proveedores} value={formMant.proveedor_id}
+                               onChange={(v) => setFormMant({ ...formMant, proveedor_id: v })}
+                               onCreado={(nuevo) => setD((prev) => ({ ...prev, proveedores: [...prev.proveedores, nuevo] }))} />
           </Campo>
 
           {formError && <Aviso tono="critical">{formError}</Aviso>}
@@ -375,7 +451,8 @@ export default function ActivoDetalle() {
       </Modal>
 
       {/* ---------------- Editar datos técnicos ---------------- */}
-      <Modal abierto={modalEditar} onClose={() => !guardando && setModalEditar(false)} titulo="Editar datos técnicos">
+      <Modal abierto={modalEditar} onClose={() => !guardando && setModalEditar(false)}
+             titulo={esAdmin ? 'Editar datos técnicos' : 'Proponer cambio de datos técnicos'}>
         {formEditar && (
           <form onSubmit={guardarEdicion} className="space-y-3">
             <Campo label="Foto" hint={activo.foto_path ? 'Sube una nueva para reemplazarla' : undefined}>
@@ -441,7 +518,7 @@ export default function ActivoDetalle() {
                 Cancelar
               </Boton>
               <Boton type="submit" disabled={guardando}>
-                {subiendoFoto ? 'Subiendo foto…' : guardando ? 'Guardando…' : 'Guardar'}
+                {subiendoFoto ? 'Subiendo foto…' : guardando ? 'Guardando…' : esAdmin ? 'Guardar' : 'Enviar para aprobación'}
               </Boton>
             </div>
           </form>
