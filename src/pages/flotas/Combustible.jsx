@@ -128,7 +128,8 @@ export default function Combustible() {
     if (!monto || monto <= 0) { alert('Escribe el monto'); return; }
     const { error: err } = await supabase.from('flota_gastos').insert({
       vehiculo_id: extraModal.id, categoria: 'Gasolina', monto, litros: Number(extraForm.litros) || null,
-      fecha: extraForm.fecha, descripcion: ['Carga extra', extraForm.ref].filter(Boolean).join(' · '),
+      fecha: extraForm.fecha, mes: extraForm.fecha.slice(0, 7),
+      descripcion: ['Carga extra', extraForm.ref].filter(Boolean).join(' · '),
       estatus: extraForm.pendiente ? 'por_aprobar' : 'aprobado', origen: 'extra', registrado_por: flotaPerfil.perfil_id,
     });
     if (err) { alert(err.message); return; }
@@ -141,7 +142,7 @@ export default function Combustible() {
     const monto = Number(tagForm.monto);
     if (!monto || monto <= 0) { alert('Escribe el monto'); return; }
     const { error: err } = await supabase.from('flota_gastos').insert({
-      vehiculo_id: tagModal.id, categoria: 'Tag', monto, fecha: tagForm.fecha,
+      vehiculo_id: tagModal.id, categoria: 'Tag', monto, fecha: tagForm.fecha, mes: tagForm.fecha.slice(0, 7),
       descripcion: ['Tags', tagForm.ref].filter(Boolean).join(' · '), estatus: 'aprobado', origen: 'tag',
       registrado_por: flotaPerfil.perfil_id,
     });
@@ -181,9 +182,10 @@ export default function Combustible() {
     setImportando(true);
     let okN = 0;
     for (const r of listas) {
+      const fecha = r.fecha || new Date().toISOString().slice(0, 10);
       const { error: err } = await supabase.from('flota_gastos').insert({
         vehiculo_id: r.v.id, categoria: r.cat, monto: Math.round(r.importe), litros: r.litros || null,
-        fecha: r.fecha || new Date().toISOString().slice(0, 10),
+        fecha, mes: fecha.slice(0, 7),
         descripcion: [r.o.producto, r.o.estacion, r.litros ? `${r.litros} L` : ''].filter(Boolean).join(' · '),
         estatus: 'aprobado', origen: 'combustible', referencia: r.ref, registrado_por: flotaPerfil.perfil_id,
       });

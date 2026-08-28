@@ -27,7 +27,7 @@ create table if not exists flota_gastos (
   monto           numeric(12, 2) not null,
   litros          numeric(10, 2),
   fecha           date not null default current_date,
-  mes             text generated always as (to_char(fecha, 'YYYY-MM')) stored,
+  mes             text not null,   -- 'YYYY-MM', lo calcula la app a partir de fecha
   descripcion     text,
   caja_chica      boolean not null default false,
   estatus         text not null default 'aprobado'

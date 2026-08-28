@@ -101,6 +101,7 @@ export default function Costos() {
       categoria: form.categoria,
       monto,
       fecha: form.fecha,
+      mes: form.fecha.slice(0, 7),
       descripcion: form.descripcion.trim() || null,
       caja_chica: esFlotaAdmin ? form.caja_chica : false,
       estatus: esFlotaAdmin ? 'aprobado' : 'por_aprobar',
