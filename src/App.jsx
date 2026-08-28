@@ -17,6 +17,9 @@ import Unidades from './pages/flotas/Unidades';
 import UnidadDetalle from './pages/flotas/UnidadDetalle';
 import UsuariosFlotas from './pages/flotas/UsuariosFlotas';
 import Tickets from './pages/flotas/Tickets';
+import Costos from './pages/flotas/Costos';
+import Combustible from './pages/flotas/Combustible';
+import CargaMasiva from './pages/flotas/CargaMasiva';
 import { Cargando } from './components/ui';
 
 function Rutas() {
@@ -47,6 +50,9 @@ function Rutas() {
         <Route path="unidades/:id" element={<UnidadDetalle />} />
         <Route path="usuarios" element={<UsuariosFlotas />} />
         <Route path="tickets" element={<Tickets />} />
+        <Route path="costos" element={<Costos />} />
+        <Route path="combustible" element={<Combustible />} />
+        <Route path="carga" element={<CargaMasiva />} />
         <Route path="*" element={<Unidades />} />
       </Route>
 

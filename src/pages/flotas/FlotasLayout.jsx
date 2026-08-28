@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 const NAV = [
   { to: '/flotas', label: 'Unidades', icono: '🚚', end: true },
   { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+  { to: '/flotas/costos', label: 'Costos', icono: '💵' },
 ];
 
 const ROLES = { admin: 'Administrador', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
@@ -60,7 +61,10 @@ export default function FlotasLayout() {
   }
 
   const nav = flotaPerfil.rol === 'admin'
-    ? [...NAV, { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' }]
+    ? [...NAV,
+        { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
+        { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
+        { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' }]
     : NAV;
 
   return (
