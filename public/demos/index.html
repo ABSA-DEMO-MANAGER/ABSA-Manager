@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Demo Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F0F2F7;--sb:#0D1B33;--st:#A8B8D0;--ac:#1A6BFF;--al:#EBF1FF;
+  --wh:#FFF;--tx:#111827;--t2:#4B5563;--mu:#9CA3AF;--bd:#E5E7EB;
+  --ok:#059669;--okb:#D1FAE5;--wn:#D97706;--wnb:#FEF3C7;
+  --er:#DC2626;--erb:#FEE2E2;--r:10px;--sh:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+.screen{display:none}.screen.active{display:flex}
+#sload{min-height:100vh;align-items:center;justify-content:center;background:var(--sb);flex-direction:column;gap:16px}
+.load-logo{font-size:52px}.load-txt{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:#fff}
+.load-sub{font-size:13px;color:var(--st)}
+.spin{width:24px;height:24px;border:2.5px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#sl{min-height:100vh;align-items:center;justify-content:center;flex-direction:column;padding:24px;background:var(--sb)}
+.lcard{background:#fff;border-radius:20px;padding:48px 40px;max-width:380px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,.35);text-align:center}
+.lcard h1{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:8px}
+.lcard p{color:var(--t2);font-size:13px;line-height:1.6;margin-bottom:28px}
+.lco{font-size:11px;color:var(--mu);margin-top:16px}
+#sreg{min-height:100vh;align-items:center;justify-content:center;flex-direction:column;padding:24px;background:var(--sb)}
+.rcard{background:#fff;border-radius:16px;padding:36px;max-width:420px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3)}
+.rcard h2{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:4px;text-align:center}
+#swait{min-height:100vh;align-items:center;justify-content:center;flex-direction:column;padding:24px;background:var(--sb)}
+.wcard{background:#fff;border-radius:16px;padding:40px 36px;max-width:400px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.3);text-align:center}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:11px;font-weight:700;color:var(--t2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--tx);background:#fff;outline:none;transition:border .2s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--ac)}
+.fg input:disabled{background:var(--bg);color:var(--t2)}
+.hint{font-size:11.5px;color:var(--mu);margin-top:3px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:500;transition:all .2s}
+.bp{background:var(--ac);color:#fff}.bp:hover{background:#1259E0}.bp:disabled{opacity:.5;cursor:not-allowed}
+.bs{background:var(--bg);color:var(--tx);border:1.5px solid var(--bd)}.bs:hover{background:var(--bd)}
+.bd2{background:var(--er);color:#fff}.bd2:hover{background:#B91C1C}
+.bok{background:var(--ok);color:#fff}.bok:hover{background:#047857}
+.bg2{background:transparent;color:var(--ac)}.bg2:hover{background:var(--al)}
+.bfull{width:100%;justify-content:center;padding:12px;font-size:15px;font-weight:600}
+.bms{background:#0078D4;color:#fff}.bms:hover{background:#0063B1}
+.bsm{padding:6px 13px;font-size:12.5px}.bxs{padding:4px 9px;font-size:12px;border-radius:6px}
+#sa{min-height:100vh;flex-direction:row}
+.sidebar{width:220px;background:var(--sb);flex-shrink:0;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:transform .3s}
+.sl-logo{padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sl-lt{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:#fff}
+.sl-ls{font-size:11px;color:var(--st);margin-top:1px}
+.sl-nav{flex:1;padding:10px;overflow-y:auto}
+.ns{font-size:10px;font-weight:700;color:rgba(168,184,208,.45);text-transform:uppercase;letter-spacing:.8px;padding:12px 10px 5px}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--st);font-size:13px;font-weight:500;transition:all .2s;margin-bottom:2px;position:relative}
+.ni:hover{background:rgba(255,255,255,.07);color:#fff}.ni.active{background:var(--ac);color:#fff}
+.ni svg{width:16px;height:16px;flex-shrink:0}
+.bdot{position:absolute;right:10px;background:#FF5533;color:#fff;border-radius:20px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+.sl-user{padding:14px 16px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px}
+.u-av{width:32px;height:32px;background:var(--ac);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+.u-nm{font-size:12.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.main{margin-left:220px;min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:#fff;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:50}
+.tb-l{display:flex;align-items:center;gap:12px}
+.ham{display:none;background:none;border:none;cursor:pointer;padding:6px}
+.tb-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700}
+.ca{padding:20px;flex:1}
+.view{display:none}.view.active{display:block}
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sh)}
+.ch{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:10px}
+.ct{font-family:'Syne',sans-serif;font-size:14px;font-weight:700}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:9px 14px;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--bd)}
+td{padding:11px 14px;border-bottom:1px solid var(--bd);vertical-align:middle;font-size:13px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(26,107,255,.015)}
+.es{padding:40px 20px;text-align:center;color:var(--mu)}
+.es-i{font-size:36px;margin-bottom:10px}
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.sc{background:#fff;border-radius:var(--r);padding:18px;box-shadow:var(--sh)}
+.sv{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;margin-bottom:2px}
+.sl2{font-size:12px;color:var(--mu);font-weight:500}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.bc{background:#fff;border-radius:var(--r);padding:16px;box-shadow:var(--sh);border-top:3px solid var(--bd)}
+.bc.oficina{border-top-color:var(--ok)}.bc.campo{border-top-color:var(--ac)}
+.bc-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;margin-bottom:10px}
+.bc-demo{background:var(--bg);border-radius:6px;padding:7px 10px;margin-bottom:6px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between}
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11.5px;font-weight:600}
+.b-ok{background:var(--okb);color:var(--ok)}.b-wn{background:var(--wnb);color:var(--wn)}
+.b-ac{background:var(--al);color:var(--ac)}.b-er{background:var(--erb);color:var(--er)}
+.b-bl{background:#FCE7F3;color:#DB2777}.b-vd{background:var(--al);color:var(--ac)}
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
+.mo.open{display:flex}
+.md{background:#fff;border-radius:14px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.2)}
+.mh{padding:18px 22px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.mh h3{font-family:'Syne',sans-serif;font-size:16px;font-weight:700}
+.mc{background:none;border:none;cursor:pointer;font-size:22px;color:var(--mu);line-height:1;padding:2px 6px;border-radius:6px}
+.mc:hover{background:var(--bg)}.mb{padding:18px 22px}
+.mf{padding:12px 22px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:#fff}
+#sv{min-height:100vh;flex-direction:column;background:var(--bg)}
+.vt{background:var(--sb);padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
+.vt-t{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#fff}
+.vc{padding:14px;flex:1}
+.dc{background:#fff;border-radius:10px;padding:14px;margin-bottom:10px;box-shadow:var(--sh);border-left:4px solid var(--bd)}
+.dc.pendiente{border-left-color:var(--wn)}.dc.en-campo{border-left-color:var(--ac)}
+.dc-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;margin-bottom:4px}
+.dc-meta{font-size:12px;color:var(--mu);margin-bottom:10px}
+.cam{background:var(--bg);border-radius:10px;padding:18px;text-align:center;border:2px dashed var(--bd);cursor:pointer;transition:border .2s;margin-bottom:12px}
+.cam:hover{border-color:var(--ac);background:var(--al)}
+.ph-prev{width:100%;max-height:200px;object-fit:contain;border-radius:8px;border:2px solid var(--bd);margin-bottom:10px}
+.cfg-sec{background:#fff;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:14px}
+.cfg-sh{padding:14px 18px;border-bottom:1px solid var(--bd);font-family:'Syne',sans-serif;font-size:14px;font-weight:700}
+.cfg-sb{padding:18px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--tx);color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;z-index:999;transform:translateY(60px);opacity:0;transition:all .3s;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{transform:translateY(0);opacity:1}.toast.ok{background:var(--ok)}.toast.er{background:var(--er)}
+.so{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}.so.open{display:block}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.pt{font-family:'Syne',sans-serif;font-size:19px;font-weight:800}
+.si2{padding:9px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;width:200px;transition:border .2s}
+.si2:focus{border-color:var(--ac)}
+.notice{background:var(--wnb);border:1px solid var(--wn);border-radius:8px;padding:9px 13px;font-size:12.5px;color:var(--wn);display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.sg{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
+@media(max-width:680px){
+  .sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}.ham{display:flex}
+  .sg{grid-template-columns:repeat(2,1fr);gap:10px}.ca{padding:14px}
+  .hm{display:none!important}th.hm,td.hm{display:none}.topbar{padding:0 14px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="sload" class="screen active">
+  <div class="load-logo">📋</div>
+  <div class="load-txt">Demo Manager</div>
+  <div class="load-sub" id="load-msg">Iniciando...</div>
+  <div class="spin" style="margin-top:8px"></div>
+</div>
+
+<!-- LOGIN -->
+<div id="sl" class="screen">
+  <div class="lcard">
+    <div style="font-size:52px;margin-bottom:16px">📋</div>
+    <h1>Demo Manager</h1>
+    <p>Gestión de demos con cadena de custodia.<br>Inicia sesión con tu cuenta corporativa.</p>
+    <button class="btn bms bfull" onclick="doLogin()" id="btn-login">
+      <svg width="18" height="18" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Iniciar con Microsoft
+    </button>
+    <div class="lco">ELECTRICA A-B SA DE CV · Uso interno</div>
+  </div>
+</div>
+
+<!-- REGISTER -->
+<div id="sreg" class="screen">
+  <div class="rcard">
+    <div style="font-size:36px;margin-bottom:10px;text-align:center">👋</div>
+    <h2 style="margin-bottom:4px">Solicitar acceso</h2>
+    <p style="text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">Completa tu información para solicitar acceso al sistema.</p>
+    <div class="fg"><label>Nombre</label><input id="reg-nom" disabled></div>
+    <div class="fg"><label>Email</label><input id="reg-em" disabled></div>
+    <div class="fg"><label>Teléfono WhatsApp *</label>
+      <input id="reg-tel" placeholder="521XXXXXXXXXX">
+      <div class="hint">Con código de país. Ej: 5213312345678</div>
+    </div>
+    <div class="fg"><label>Rol *</label>
+      <select id="reg-rol"><option value="Vendedor">Vendedor</option><option value="BL">Business Leader (BL)</option></select>
+    </div>
+    <button class="btn bp bfull" onclick="enviarSolicitud()" id="btn-reg">Enviar solicitud</button>
+    <p style="font-size:12px;color:var(--mu);margin-top:12px;text-align:center;cursor:pointer" onclick="doLogout()">← Salir</p>
+  </div>
+</div>
+
+<!-- WAITING -->
+<div id="swait" class="screen">
+  <div class="wcard">
+    <div style="font-size:52px;margin-bottom:14px">⏳</div>
+    <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px">Solicitud enviada</h2>
+    <p style="color:var(--t2);font-size:13px;line-height:1.6;margin-bottom:16px">El administrador revisará tu solicitud y recibirás una notificación cuando sea aprobada.</p>
+    <div id="wait-info" style="background:var(--bg);border-radius:8px;padding:12px;font-size:13px;color:var(--t2);margin-bottom:20px;text-align:left"></div>
+    <button class="btn bs bfull" onclick="recheck()">🔄 Verificar aprobación</button>
+    <p style="font-size:12px;color:var(--mu);margin-top:12px;cursor:pointer" onclick="doLogout()">← Salir</p>
+  </div>
+</div>
+
+<!-- ADMIN APP -->
+<div id="sa" class="screen">
+  <div class="so" id="so" onclick="closeSb()"></div>
+  <div class="sidebar" id="sb">
+    <div class="sl-logo"><div class="sl-lt">Demo Manager</div><div class="sl-ls">Panel Admin</div></div>
+    <nav class="sl-nav">
+      <div class="ns">Principal</div>
+      <div class="ni active" onclick="nav('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Ubicaciones
+      </div>
+      <div class="ns">Gestión</div>
+      <div class="ni" onclick="nav('demos')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Demos
+      </div>
+      <div class="ni" onclick="nav('personas')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Personas
+      </div>
+      <div class="ni" onclick="nav('solicitudes')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>Solicitudes
+        <span class="bdot" id="dot-sol" style="display:none">0</span>
+      </div>
+      <div class="ni" onclick="nav('pendientes')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Custodia Pend.
+        <span class="bdot" id="dot-pend" style="display:none">0</span>
+      </div>
+      <div class="ni" onclick="nav('historial')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Historial
+      </div>
+      <div class="ns">Sistema</div>
+      <div class="ni" onclick="nav('config')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Configuración
+      </div>
+    </nav>
+    <div class="sl-user">
+      <div class="u-av" id="av">A</div>
+      <div style="flex:1;overflow:hidden"><div class="u-nm" id="uname">—</div><div style="font-size:11px;color:var(--st)">⭐ Admin</div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-l">
+        <button class="ham" onclick="openSb()"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        <div class="tb-title" id="tbtitle">Ubicaciones</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn bs bsm" onclick="loadAll().then(renderAll)">↻</button>
+        <button class="btn bs bsm" onclick="doLogout()">Salir</button>
+      </div>
+    </div>
+    <div class="ca">
+
+      <!-- DASHBOARD -->
+      <div id="v-dashboard" class="view active">
+        <div class="ph"><div class="pt">¿Dónde está cada demo?</div></div>
+        <div id="board"></div><div class="sg" id="stats"></div>
+      </div>
+
+      <!-- DEMOS -->
+      <div id="v-demos" class="view">
+        <div class="ph"><div class="pt">Demos</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input class="si2" id="sd" placeholder="Buscar..." oninput="filterT('td','sd')">
+            <button class="btn bp bsm" onclick="openM('m-add-demo')">+ Nuevo</button>
+          </div>
+        </div>
+        <div class="card"><table id="td"><thead><tr><th>Demo</th><th>Ubicación</th><th>Estado</th><th>Acc.</th></tr></thead><tbody id="tbd"></tbody></table></div>
+      </div>
+
+      <!-- PERSONAS -->
+      <div id="v-personas" class="view">
+        <div class="ph"><div class="pt">Personas aprobadas</div>
+          <input class="si2" id="sp" placeholder="Buscar..." oninput="filterT('tp','sp')">
+        </div>
+        <div class="card"><table id="tp"><thead><tr><th>Nombre</th><th>Email</th><th class="hm">Teléfono</th><th>Rol</th><th>Demos</th><th></th></tr></thead><tbody id="tbp"></tbody></table></div>
+      </div>
+
+      <!-- SOLICITUDES -->
+      <div id="v-solicitudes" class="view">
+        <div class="ph"><div class="pt">Solicitudes de acceso</div></div>
+        <div id="sol-list"></div>
+      </div>
+
+      <!-- PENDIENTES -->
+      <div id="v-pendientes" class="view">
+        <div class="ph"><div class="pt">Custodia pendiente</div></div>
+        <div id="pend-list"></div>
+      </div>
+
+      <!-- HISTORIAL -->
+      <div id="v-historial" class="view">
+        <div class="ph"><div class="pt">Historial de custodia</div></div>
+        <div style="margin-bottom:14px">
+          <input class="si2" id="sh" placeholder="Buscar demo..." oninput="renderHist()" style="width:100%;max-width:320px">
+        </div>
+        <div id="hist-list"></div>
+      </div>
+
+      <!-- CONFIG -->
+      <div id="v-config" class="view">
+        <div class="pt" style="margin-bottom:16px">Configuración</div>
+        <div class="cfg-sec">
+          <div class="cfg-sh">📧 Notificaciones — EmailJS</div>
+          <div class="cfg-sb">
+            <div class="two-col">
+              <div class="fg"><label>Service ID</label><input id="cfg-ejs" placeholder="service_xxx"></div>
+              <div class="fg"><label>Template ID</label><input id="cfg-ejt" placeholder="template_xxx"></div>
+            </div>
+            <div class="fg"><label>Public Key</label><input id="cfg-ejk" placeholder="xxxxxxx"></div>
+            <button class="btn bp bsm" onclick="saveEmailCfg()">Guardar EmailJS</button>
+          </div>
+        </div>
+        <div class="cfg-sec">
+          <div class="cfg-sh">⭐ Administradores</div>
+          <div class="cfg-sb">
+            <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Los admins tienen acceso completo. Se guardan en Firestore y aplican para todos los dispositivos.</p>
+            <div id="admins-list" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px"><input type="email" id="new-admin" class="si2" placeholder="email@empresa.com" style="flex:1"><button class="btn bp bsm" onclick="addAdmin()">+ Agregar</button></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- VENDOR -->
+<div id="sv" class="screen">
+  <div class="vt">
+    <div class="vt-t">📋 Demo Manager</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="v-uname" style="font-size:12px;color:var(--st)"></span>
+      <button class="btn bxs" style="background:rgba(255,255,255,.15);color:#fff;border:none" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+  <div class="vc">
+    <div id="v-pend-sec"></div>
+    <div id="v-mine-sec"></div>
+    <div id="v-all-sec"></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="mo" id="m-add-demo"><div class="md">
+  <div class="mh"><h3>Nuevo Demo</h3><button class="mc" onclick="closeM('m-add-demo')">×</button></div>
+  <div class="mb">
+    <div class="fg"><label>Nombre *</label><input id="d-nom" placeholder="Ej: Demo Producto X"></div>
+    <div class="fg"><label>Descripción</label><textarea id="d-desc" rows="2" style="resize:vertical"></textarea></div>
+    <div class="fg"><label>Número de serie</label><input id="d-serie" placeholder="SN-2024-001"></div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-add-demo')">Cancelar</button><button class="btn bp" onclick="addDemo()" id="btn-add-demo">Guardar</button></div>
+</div></div>
+
+<div class="mo" id="m-asignar"><div class="md">
+  <div class="mh"><h3>Asignar Demo</h3><button class="mc" onclick="closeM('m-asignar')">×</button></div>
+  <div class="mb">
+    <div class="notice">📦 El demo quedará pendiente hasta que el receptor acepte con foto.</div>
+    <div class="fg"><label>Demo *</label><select id="a-demo"><option value="">Selecciona...</option></select></div>
+    <div class="fg"><label>Asignar a *</label><select id="a-pers"><option value="">Selecciona...</option></select></div>
+    <div class="fg"><label>💬 Comentarios / Instrucciones</label>
+      <textarea id="a-notas" rows="3" placeholder="Ej: Llevar el cargador, presentar en sala 3, etc."></textarea>
+      <div class="hint">Visibles para el receptor y quedan en el historial.</div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-asignar')">Cancelar</button><button class="btn bp" onclick="asignarDemo()">Asignar y Notificar</button></div>
+</div></div>
+
+<div class="mo" id="m-aceptar-dev"><div class="md">
+  <div class="mh"><h3>Confirmar Recepción en Oficina</h3><button class="mc" onclick="closeM('m-aceptar-dev')">×</button></div>
+  <div class="mb">
+    <div id="dev-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+    <div class="cam" onclick="document.getElementById('ph-dev').click()"><div style="font-size:36px;margin-bottom:6px">📷</div><p>Tomar foto de recepción</p></div>
+    <input type="file" id="ph-dev" accept="image/*" capture="environment" style="display:none" onchange="photoSel(event,'dev')">
+    <div id="prev-dev" style="display:none"><img id="img-dev" class="ph-prev"><button class="btn bg2 bsm" onclick="clearPh('dev')">× Cambiar</button></div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-aceptar-dev')">Cancelar</button><button class="btn bok bfull" onclick="confirmarDev()" id="btn-cdev" disabled>✓ Demo Recibido en Oficina</button></div>
+</div></div>
+
+<div class="mo" id="m-aceptar"><div class="md">
+  <div class="mh"><h3>Aceptar Demo</h3><button class="mc" onclick="closeM('m-aceptar')">×</button></div>
+  <div class="mb">
+    <div id="ac-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+    <div class="cam" onclick="document.getElementById('ph-ac').click()"><div style="font-size:36px;margin-bottom:6px">📷</div><p>Toma foto del demo recibido</p></div>
+    <input type="file" id="ph-ac" accept="image/*" capture="environment" style="display:none" onchange="photoSel(event,'ac')">
+    <div id="prev-ac" style="display:none"><img id="img-ac" class="ph-prev"><button class="btn bg2 bsm" onclick="clearPh('ac')">× Cambiar</button></div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-aceptar')">Cancelar</button><button class="btn bok bfull" onclick="aceptarDemo()" id="btn-ac" disabled>✓ Confirmar Recepción</button></div>
+</div></div>
+
+<div class="mo" id="m-transferir"><div class="md">
+  <div class="mh"><h3>Transferir Demo</h3><button class="mc" onclick="closeM('m-transferir')">×</button></div>
+  <div class="mb">
+    <div id="tr-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+    <div class="fg"><label>Transferir a *</label><select id="tr-pers"><option value="">Selecciona...</option></select></div>
+    <div class="fg"><label>💬 Comentarios / Motivo</label>
+      <textarea id="tr-notas" rows="3" placeholder="Ej: Cubre visita con cliente, incluye manual de usuario, etc."></textarea>
+      <div class="hint">Visibles para el receptor y quedan en el historial.</div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-transferir')">Cancelar</button><button class="btn bp" onclick="transferirDemo()">Transferir y Notificar</button></div>
+</div></div>
+
+<div class="mo" id="m-devolver"><div class="md">
+  <div class="mh"><h3>Devolver a Oficina</h3><button class="mc" onclick="closeM('m-devolver')">×</button></div>
+  <div class="mb">
+    <div id="dv-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px"></div>
+    <div class="notice">📬 Se notificará al administrador para confirmar la recepción.</div>
+    <div class="fg"><label>💬 Comentarios / Motivo de devolución</label>
+      <textarea id="dv-notas" rows="3" placeholder="Ej: Demo completado, equipo en buen estado, falta el cable HDMI, etc."></textarea>
+      <div class="hint">Quedan en el historial de custodia.</div>
+    </div>
+  </div>
+  <div class="mf"><button class="btn bs" onclick="closeM('m-devolver')">Cancelar</button><button class="btn bp" onclick="devolverDemo()">Notificar Devolución</button></div>
+</div></div>
+
+<div class="mo" id="m-foto"><div class="md">
+  <div class="mh"><h3>Evidencia fotográfica</h3><button class="mc" onclick="closeM('m-foto')">×</button></div>
+  <div class="mb" style="text-align:center">
+    <img id="foto-img" src="" style="max-width:100%;border-radius:10px">
+    <p id="foto-info" style="margin-top:10px;font-size:12px;color:var(--mu)"></p>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════════
+// FIREBASE INIT
+// ═══════════════════════════════════════════
+firebase.initializeApp({
+  apiKey: "AIzaSyByXulw75eXYG9xabn5VXrz-rrrfQFjkzk",
+  authDomain: "fir-manager-4dfd4.firebaseapp.com",
+  projectId: "fir-manager-4dfd4",
+  storageBucket: "fir-manager-4dfd4.firebasestorage.app",
+  messagingSenderId: "654451351024",
+  appId: "1:654451351024:web:c8c12794d4e5a5dc9b1135"
+});
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+const provider = new firebase.auth.OAuthProvider('microsoft.com');
+provider.setCustomParameters({ tenant: 'b082fba7-f033-4ac3-b784-901ee50db4fb' });
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+const OFICINA = 'ABSA_AMAPOLA';
+const OFICINA_NOM = 'ABSA Amapola';
+
+let S = {
+  user: null, role: 'vendor',
+  demos: [], personas: [], custodia: [], solicitudes: [],
+  adminEmails: [], emailjsCfg: {},
+  pendingCustId: null, pendingDevId: null, pendingTrId: null, pendingDvId: null,
+  photos: { ac: null, dev: null }
+};
+
+// ═══════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  setLoad('Verificando sesión...');
+  auth.onAuthStateChanged(async user => {
+    if (user) {
+      S.user = { name: user.displayName, email: user.email };
+      setLoad('Cargando datos...');
+      await loadAll();
+      routeUser();
+    } else {
+      show('sl');
+    }
+  });
+});
+
+async function doLogin() {
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Conectando...';
+  try {
+    await auth.signInWithPopup(provider);
+  } catch(e) {
+    toast('Error: ' + e.message, 'er');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg> Iniciar con Microsoft';
+  }
+}
+
+function doLogout() { auth.signOut().then(() => show('sl')); }
+
+function routeUser() {
+  const email = S.user.email.toLowerCase();
+  if (S.adminEmails.includes(email)) {
+    S.role = 'admin';
+    document.getElementById('uname').textContent = S.user.name;
+    document.getElementById('av').textContent = S.user.name[0].toUpperCase();
+    if (S.emailjsCfg?.key) emailjs.init(S.emailjsCfg.key);
+    show('sa'); nav('dashboard'); return;
+  }
+  const persona = S.personas.find(p => p.email.toLowerCase() === email);
+  if (persona) {
+    S.role = 'vendor';
+    document.getElementById('v-uname').textContent = S.user.name;
+    show('sv'); renderVendor(); return;
+  }
+  const sol = S.solicitudes.find(s => s.email.toLowerCase() === email && s.estado === 'Pendiente');
+  if (sol) { showWaiting(sol); return; }
+  show('sreg');
+  document.getElementById('reg-nom').value = S.user.name;
+  document.getElementById('reg-em').value = S.user.email;
+  const rej = S.solicitudes.find(s => s.email.toLowerCase() === email && s.estado === 'Rechazado');
+  if (rej) toast('Tu solicitud anterior fue rechazada. Puedes volver a enviarla.', 'er');
+}
+
+function showWaiting(sol) {
+  show('swait');
+  document.getElementById('wait-info').innerHTML = `<strong>${sol.nombre}</strong><br>${sol.email}<br>Rol: <strong>${sol.rol}</strong><br>Enviado: ${fmt(sol.fecha)}`;
+}
+
+async function recheck() {
+  setLoad('Verificando...');
+  await loadAll();
+  routeUser();
+}
+
+// ═══════════════════════════════════════════
+// FIRESTORE DATA
+// ═══════════════════════════════════════════
+async function loadAll() {
+  const [demos, personas, custodia, solicitudes, config] = await Promise.all([
+    db.collection('demos').get(),
+    db.collection('personas').get(),
+    db.collection('custodia').orderBy('fecha', 'asc').get(),
+    db.collection('solicitudes').get(),
+    db.collection('config').get()
+  ]);
+  S.demos = demos.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.personas = personas.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.custodia = custodia.docs.map(d => ({ id: d.id, ...d.data() }));
+  S.solicitudes = solicitudes.docs.map(d => ({ id: d.id, ...d.data() }));
+  config.docs.forEach(d => {
+    if (d.id === 'admins') S.adminEmails = d.data().emails || [];
+    if (d.id === 'emailjs') S.emailjsCfg = d.data();
+  });
+}
+
+// ═══════════════════════════════════════════
+// REGISTRATION
+// ═══════════════════════════════════════════
+async function enviarSolicitud() {
+  const tel = v('reg-tel');
+  if (!tel) { toast('El teléfono es requerido', 'er'); return; }
+  const btn = document.getElementById('btn-reg');
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div> Enviando...';
+  try {
+    const email = S.user.email.toLowerCase();
+    const data = { nombre: S.user.name, email, telefono: tel, rol: v('reg-rol'), estado: 'Pendiente', fecha: today() };
+    await db.collection('solicitudes').doc(email).set(data);
+    S.solicitudes = S.solicitudes.filter(s => s.email !== email);
+    S.solicitudes.push({ id: email, ...data });
+    const msg = `📋 *Demo Manager*\nNueva solicitud:\n*${data.nombre}* (${email})\nRol: ${data.rol}\n${location.href}`;
+    for (const em of S.adminEmails) await sendEmail(em, 'Admin', '—', data.nombre, msg);
+    showWaiting(data); toast('Solicitud enviada ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+  btn.disabled = false; btn.textContent = 'Enviar solicitud';
+}
+
+// ═══════════════════════════════════════════
+// ADMIN — CONFIG
+// ═══════════════════════════════════════════
+async function addAdmin() {
+  const em = document.getElementById('new-admin').value.trim().toLowerCase();
+  if (!em) return;
+  if (S.adminEmails.includes(em)) { toast('Ya es admin', 'er'); return; }
+  S.adminEmails.push(em);
+  await db.collection('config').doc('admins').set({ emails: S.adminEmails });
+  renderConfig(); toast('Admin agregado ✓', 'ok');
+  document.getElementById('new-admin').value = '';
+}
+
+async function removeAdmin(em) {
+  if (S.adminEmails.length <= 1) { toast('No puedes eliminar el único admin', 'er'); return; }
+  if (!confirm('¿Quitar a ' + em + ' como admin?')) return;
+  S.adminEmails = S.adminEmails.filter(e => e !== em);
+  await db.collection('config').doc('admins').set({ emails: S.adminEmails });
+  renderConfig(); toast('Admin eliminado ✓', 'ok');
+}
+
+async function saveEmailCfg() {
+  S.emailjsCfg = { service: v('cfg-ejs'), template: v('cfg-ejt'), key: v('cfg-ejk') };
+  await db.collection('config').doc('emailjs').set(S.emailjsCfg);
+  if (S.emailjsCfg.key) emailjs.init(S.emailjsCfg.key);
+  toast('EmailJS guardado ✓', 'ok');
+}
+
+// ═══════════════════════════════════════════
+// ADMIN — SOLICITUDES
+// ═══════════════════════════════════════════
+async function aprobarSolicitud(solId) {
+  const sol = S.solicitudes.find(s => s.id === solId); if (!sol) return;
+  try {
+    const persona = { nombre: sol.nombre, email: sol.email, telefono: sol.telefono, rol: sol.rol, fecha: today() };
+    await db.collection('personas').doc(sol.email).set(persona);
+    await db.collection('solicitudes').doc(solId).update({ estado: 'Aprobado' });
+    S.personas.push({ id: sol.email, ...persona });
+    S.solicitudes.find(s => s.id === solId).estado = 'Aprobado';
+    await notif(sol, null, 'aprobado');
+    renderAll(); toast(`${sol.nombre} aprobado ✓`, 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+}
+
+async function rechazarSolicitud(solId) {
+  if (!confirm('¿Rechazar esta solicitud?')) return;
+  const sol = S.solicitudes.find(s => s.id === solId); if (!sol) return;
+  try {
+    await db.collection('solicitudes').doc(solId).update({ estado: 'Rechazado' });
+    S.solicitudes.find(s => s.id === solId).estado = 'Rechazado';
+    await notif(sol, null, 'rechazado');
+    renderAll(); toast('Solicitud rechazada', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+}
+
+// ═══════════════════════════════════════════
+// ADMIN — DEMOS
+// ═══════════════════════════════════════════
+async function addDemo() {
+  const nom = v('d-nom'); if (!nom) { toast('Nombre requerido', 'er'); return; }
+  const btn = document.getElementById('btn-add-demo');
+  btn.disabled = true; btn.innerHTML = '<div class="spin"></div>';
+  try {
+    const data = { nombre: nom, descripcion: v('d-desc'), serie: v('d-serie'), ubicacion: OFICINA, custodio: OFICINA_NOM, fecha: today(), estado: 'En Oficina' };
+    const ref = await db.collection('demos').add(data);
+    S.demos.push({ id: ref.id, ...data });
+    closeM('m-add-demo');
+    ['d-nom','d-desc','d-serie'].forEach(id => document.getElementById(id).value = '');
+    renderAll(); toast('Demo agregado ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+  btn.disabled = false; btn.textContent = 'Guardar';
+}
+
+function openAsignar(demoId = '') {
+  const dSel = document.getElementById('a-demo'), pSel = document.getElementById('a-pers');
+  dSel.innerHTML = '<option value="">Selecciona demo...</option>' + S.demos.filter(d => d.ubicacion === OFICINA).map(d => `<option value="${d.id}">${d.nombre}</option>`).join('');
+  pSel.innerHTML = '<option value="">Selecciona persona...</option>' + S.personas.map(p => `<option value="${p.id}">${p.nombre} (${p.rol})</option>`).join('');
+  if (demoId) dSel.value = demoId;
+  openM('m-asignar');
+}
+
+async function asignarDemo() {
+  const demoId = v('a-demo'), persId = v('a-pers');
+  if (!demoId || !persId) { toast('Selecciona demo y persona', 'er'); return; }
+  const demo = S.demos.find(d => d.id === demoId);
+  const pers = S.personas.find(p => p.id === persId);
+  if (!demo || !pers) { toast('Error: recarga e intenta de nuevo', 'er'); return; }
+  try {
+    const cust = { demoId, demoNombre: demo.nombre, deId: OFICINA, deNombre: OFICINA_NOM, paraId: persId, paraNombre: pers.nombre, estado: 'Pendiente', fecha: today(), fechaAceptacion: '', foto: '', notas: v('a-notas'), tipo: 'Asignacion' };
+    const ref = await db.collection('custodia').add(cust);
+    S.custodia.push({ id: ref.id, ...cust });
+    const upd = { estado: 'Pendiente', ubicacion: 'pend_' + persId, custodio: 'Pendiente → ' + pers.nombre };
+    await db.collection('demos').doc(demoId).update(upd);
+    Object.assign(S.demos.find(d => d.id === demoId), upd);
+    closeM('m-asignar'); document.getElementById('a-notas').value = '';
+    await notif(pers, demo, 'asignacion', cust.notas);
+    renderAll(); toast('Asignado y notificado ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+}
+
+function openAceptarDev(custId) {
+  S.pendingDevId = custId; S.photos.dev = null;
+  const c = S.custodia.find(x => x.id === custId);
+  document.getElementById('dev-info').innerHTML = `<strong>${c.demoNombre}</strong><br>Devuelto por: <strong>${c.deNombre}</strong> · ${fmt(c.fecha)}`;
+  document.getElementById('prev-dev').style.display = 'none';
+  document.getElementById('ph-dev').value = '';
+  document.getElementById('btn-cdev').disabled = true;
+  document.querySelector('#m-aceptar-dev .cam').style.display = 'block';
+  openM('m-aceptar-dev');
+}
+
+async function confirmarDev() {
+  if (!S.photos.dev || !S.pendingDevId) return;
+  const btn = document.getElementById('btn-cdev'); btn.disabled = true; btn.innerHTML = '<div class="spin"></div>';
+  try {
+    const c = S.custodia.find(x => x.id === S.pendingDevId);
+    await db.collection('custodia').doc(S.pendingDevId).update({ estado: 'Aceptado', fechaAceptacion: today(), foto: S.photos.dev });
+    await db.collection('demos').doc(c.demoId).update({ estado: 'En Oficina', ubicacion: OFICINA, custodio: OFICINA_NOM });
+    Object.assign(S.custodia.find(x => x.id === S.pendingDevId), { estado: 'Aceptado', fechaAceptacion: today(), foto: S.photos.dev });
+    Object.assign(S.demos.find(d => d.id === c.demoId), { estado: 'En Oficina', ubicacion: OFICINA, custodio: OFICINA_NOM });
+    closeM('m-aceptar-dev'); renderAll(); toast('Demo recibido en oficina ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+  btn.disabled = false; btn.textContent = '✓ Demo Recibido en Oficina';
+}
+
+async function delDemo(id) {
+  if (!confirm('¿Eliminar este demo?')) return;
+  await db.collection('demos').doc(id).delete();
+  S.demos = S.demos.filter(d => d.id !== id);
+  renderAll(); toast('Demo eliminado ✓', 'ok');
+}
+
+async function delPers(id) {
+  if (!confirm('¿Eliminar esta persona?')) return;
+  await db.collection('personas').doc(id).delete();
+  S.personas = S.personas.filter(p => p.id !== id);
+  renderAll(); toast('Persona eliminada ✓', 'ok');
+}
+
+// ═══════════════════════════════════════════
+// VENDOR ACTIONS
+// ═══════════════════════════════════════════
+function myP() { return S.personas.find(p => p.email.toLowerCase() === S.user?.email?.toLowerCase()); }
+function myPendientes() { const mp = myP(); if (!mp) return []; return S.custodia.filter(c => c.paraId === mp.id && c.estado === 'Pendiente' && c.tipo !== 'Devolucion'); }
+function misDemos() { const mp = myP(); if (!mp) return []; return S.demos.filter(d => d.ubicacion === mp.id); }
+
+function openAceptar(custId) {
+  S.pendingCustId = custId; S.photos.ac = null;
+  const c = S.custodia.find(x => x.id === custId);
+  document.getElementById('ac-info').innerHTML = `<strong>${c.demoNombre}</strong><br>De: <strong>${c.deNombre}</strong>${c.notas ? `<br><div style="margin-top:6px;background:var(--bg);border-radius:6px;padding:6px 10px;font-size:12px">💬 ${c.notas}</div>` : ''}`;
+  document.getElementById('prev-ac').style.display = 'none';
+  document.getElementById('ph-ac').value = '';
+  document.getElementById('btn-ac').disabled = true;
+  document.querySelector('#m-aceptar .cam').style.display = 'block';
+  openM('m-aceptar');
+}
+
+async function aceptarDemo() {
+  if (!S.photos.ac || !S.pendingCustId) return;
+  const btn = document.getElementById('btn-ac'); btn.disabled = true; btn.innerHTML = '<div class="spin"></div>';
+  try {
+    const c = S.custodia.find(x => x.id === S.pendingCustId);
+    const mp = myP();
+    await db.collection('custodia').doc(S.pendingCustId).update({ estado: 'Aceptado', fechaAceptacion: today(), foto: S.photos.ac });
+    await db.collection('demos').doc(c.demoId).update({ estado: 'En Campo', ubicacion: mp.id, custodio: mp.nombre });
+    Object.assign(S.custodia.find(x => x.id === S.pendingCustId), { estado: 'Aceptado', fechaAceptacion: today(), foto: S.photos.ac });
+    Object.assign(S.demos.find(d => d.id === c.demoId), { estado: 'En Campo', ubicacion: mp.id, custodio: mp.nombre });
+    closeM('m-aceptar'); renderVendor(); toast('Demo aceptado ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+  btn.disabled = false; btn.textContent = '✓ Confirmar Recepción';
+}
+
+function openTransferir(demoId) {
+  S.pendingTrId = demoId;
+  const demo = S.demos.find(d => d.id === demoId), mp = myP();
+  document.getElementById('tr-info').innerHTML = `<strong>${demo.nombre}</strong><br>Actualmente en tu custodia`;
+  document.getElementById('tr-pers').innerHTML = '<option value="">Selecciona persona...</option>' + S.personas.filter(p => p.id !== mp?.id).map(p => `<option value="${p.id}">${p.nombre} (${p.rol})</option>`).join('');
+  document.getElementById('tr-notas').value = '';
+  openM('m-transferir');
+}
+
+async function transferirDemo() {
+  const persId = v('tr-pers'); if (!persId) { toast('Selecciona persona', 'er'); return; }
+  const demo = S.demos.find(d => d.id === S.pendingTrId), mp = myP(), toPers = S.personas.find(p => p.id === persId);
+  try {
+    const cust = { demoId: demo.id, demoNombre: demo.nombre, deId: mp.id, deNombre: mp.nombre, paraId: persId, paraNombre: toPers.nombre, estado: 'Pendiente', fecha: today(), fechaAceptacion: '', foto: '', notas: v('tr-notas'), tipo: 'Transferencia' };
+    const ref = await db.collection('custodia').add(cust);
+    S.custodia.push({ id: ref.id, ...cust });
+    const upd = { estado: 'Pendiente', ubicacion: 'pend_' + persId, custodio: 'Pendiente → ' + toPers.nombre };
+    await db.collection('demos').doc(demo.id).update(upd);
+    Object.assign(S.demos.find(d => d.id === S.pendingTrId), upd);
+    closeM('m-transferir');
+    await notif(toPers, demo, 'transferencia', mp.nombre);
+    renderVendor(); toast('Transferencia notificada ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+}
+
+function openDevolver(demoId) {
+  S.pendingDvId = demoId;
+  const demo = S.demos.find(d => d.id === demoId);
+  document.getElementById('dv-info').innerHTML = `<strong>${demo.nombre}</strong><br>Actualmente en tu custodia`;
+  document.getElementById('dv-notas').value = '';
+  openM('m-devolver');
+}
+
+async function devolverDemo() {
+  const demo = S.demos.find(d => d.id === S.pendingDvId), mp = myP();
+  try {
+    const cust = { demoId: demo.id, demoNombre: demo.nombre, deId: mp.id, deNombre: mp.nombre, paraId: OFICINA, paraNombre: OFICINA_NOM, estado: 'Pendiente', fecha: today(), fechaAceptacion: '', foto: '', notas: v('dv-notas'), tipo: 'Devolucion' };
+    const ref = await db.collection('custodia').add(cust);
+    S.custodia.push({ id: ref.id, ...cust });
+    const upd = { estado: 'Pendiente Devolucion', ubicacion: 'dev_' + mp.id, custodio: 'Devolviendo → Oficina' };
+    await db.collection('demos').doc(demo.id).update(upd);
+    Object.assign(S.demos.find(d => d.id === S.pendingDvId), upd);
+    closeM('m-devolver');
+    for (const em of S.adminEmails) await notif({ nombre: 'Admin', email: em, telefono: '' }, demo, 'devolucion');
+    renderVendor(); toast('Devolución notificada ✓', 'ok');
+  } catch(e) { toast('Error: ' + e.message, 'er'); }
+}
+
+// ═══════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════
+async function sendEmail(toEmail, toName, demo, de, mensaje) {
+  if (!S.emailjsCfg?.key || !S.emailjsCfg?.service) return;
+  try { await emailjs.send(S.emailjsCfg.service, S.emailjsCfg.template, { to_email: toEmail, to_name: toName, demo, de, mensaje, app_url: location.href }); }
+  catch(e) {}
+}
+
+function sendWA(tel, msg) {
+  if (!tel) return;
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+async function notif(pers, demo, tipo, extra = '') {
+  const url = location.href;
+  let msg = '';
+  if (tipo === 'asignacion')    msg = `📋 *Demo Manager*\nHola ${pers.nombre}, se te asignó *${demo.nombre}*.\nEntra a aceptar: ${url}${extra ? '\nNotas: ' + extra : ''}`;
+  if (tipo === 'transferencia') msg = `📋 *Demo Manager*\nHola ${pers.nombre}, *${extra}* te transfirió *${demo.nombre}*.\nEntra a aceptar: ${url}`;
+  if (tipo === 'devolucion')    msg = `📋 *Demo Manager*\n*${pers.nombre}* devuelve *${demo.nombre}* a la oficina. Confirma en: ${url}`;
+  if (tipo === 'aprobado')      msg = `📋 *Demo Manager*\nHola ${pers.nombre}, tu acceso fue *aprobado*. Entra en: ${url}`;
+  if (tipo === 'rechazado')     msg = `📋 *Demo Manager*\nHola ${pers.nombre}, tu solicitud fue *rechazada*. Contacta al administrador.`;
+  await sendEmail(pers.email, pers.nombre, demo?.nombre || '—', S.user?.name || 'Admin', msg);
+  if (pers.telefono) sendWA(pers.telefono, msg);
+}
+
+// ═══════════════════════════════════════════
+// PHOTO
+// ═══════════════════════════════════════════
+function photoSel(e, which) {
+  const file = e.target.files[0]; if (!file) return;
+  compressImg(file).then(url => {
+    S.photos[which] = url;
+    document.getElementById('img-' + which).src = url;
+    document.getElementById('prev-' + which).style.display = 'block';
+    e.target.closest('.mb').querySelector('.cam').style.display = 'none';
+    document.getElementById(which === 'ac' ? 'btn-ac' : 'btn-cdev').disabled = false;
+  });
+}
+
+function clearPh(which) {
+  S.photos[which] = null;
+  document.getElementById('prev-' + which).style.display = 'none';
+  document.getElementById('ph-' + which).closest('.mb').querySelector('.cam').style.display = 'block';
+  document.getElementById('ph-' + which).value = '';
+  document.getElementById(which === 'ac' ? 'btn-ac' : 'btn-cdev').disabled = true;
+}
+
+function compressImg(file) {
+  return new Promise(res => {
+    const r = new FileReader(); r.onload = e => {
+      const img = new Image(); img.onload = () => {
+        const max = 800; let w = img.width, h = img.height;
+        if (w > h) { h = Math.round(h * max / w); w = max; } else { w = Math.round(w * max / h); h = max; }
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h); res(c.toDataURL('image/jpeg', .8));
+      }; img.src = e.target.result;
+    }; r.readAsDataURL(file);
+  });
+}
+
+// ═══════════════════════════════════════════
+// RENDER — ADMIN
+// ═══════════════════════════════════════════
+function renderAll() { renderBoard(); renderDemos(); renderPersonas(); renderSolicitudes(); renderPendientes(); renderHist(); renderConfig(); updateBadges(); }
+
+function renderBoard() {
+  const groups = {};
+  groups[OFICINA] = { label: OFICINA_NOM, demos: [], cls: 'oficina' };
+  S.personas.forEach(p => { groups[p.id] = { label: p.nombre, demos: [], cls: 'campo' }; });
+  S.demos.forEach(d => {
+    let loc = d.ubicacion;
+    if (loc?.startsWith('pend_')) loc = loc.replace('pend_', '');
+    else if (loc?.startsWith('dev_')) loc = loc.replace('dev_', '');
+    (groups[loc] || groups[OFICINA]).demos.push(d);
+  });
+  let html = '';
+  Object.entries(groups).forEach(([, g]) => {
+    if (!g.demos.length) return;
+    html += `<div class="bc ${g.cls}"><div class="bc-title">${g.label} <span style="font-size:11px;color:var(--mu)">(${g.demos.length})</span></div>`;
+    g.demos.forEach(d => html += `<div class="bc-demo"><span>${d.nombre}</span><span class="badge ${d.estado === 'En Oficina' ? 'b-ok' : d.estado === 'En Campo' ? 'b-ac' : 'b-wn'}" style="font-size:10px">${d.estado === 'En Oficina' ? 'Oficina' : d.estado === 'En Campo' ? 'Campo' : 'Pend.'}</span></div>`);
+    html += '</div>';
+  });
+  document.getElementById('board').innerHTML = `<div class="board">${html || '<p style="color:var(--mu);font-size:13px">Sin demos creados aún.</p>'}</div>`;
+  const enOf = S.demos.filter(d => d.ubicacion === OFICINA).length;
+  const enCa = S.demos.filter(d => d.estado === 'En Campo').length;
+  const pe = S.demos.filter(d => d.estado?.includes('Pendiente')).length;
+  document.getElementById('stats').innerHTML = `
+    <div class="sc"><div class="sv" style="color:var(--ok)">${enOf}</div><div class="sl2">En Oficina</div></div>
+    <div class="sc"><div class="sv" style="color:var(--ac)">${enCa}</div><div class="sl2">En Campo</div></div>
+    <div class="sc"><div class="sv" style="color:var(--wn)">${pe}</div><div class="sl2">Pendientes</div></div>
+    <div class="sc"><div class="sv">${S.demos.length}</div><div class="sl2">Total</div></div>`;
+}
+
+function renderDemos() {
+  const tb = document.getElementById('tbd');
+  if (!S.demos.length) { tb.innerHTML = `<tr><td colspan="4"><div class="es"><div class="es-i">📋</div><p>Sin demos.</p></div></td></tr>`; return; }
+  tb.innerHTML = S.demos.map(d => `<tr>
+    <td><strong>${d.nombre}</strong>${d.serie ? `<br><span style="font-size:11px;color:var(--mu)">${d.serie}</span>` : ''}</td>
+    <td style="font-size:13px">${d.custodio}</td>
+    <td><span class="badge ${d.estado === 'En Oficina' ? 'b-ok' : d.estado === 'En Campo' ? 'b-ac' : 'b-wn'}">${d.estado}</span></td>
+    <td><div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${d.ubicacion === OFICINA ? `<button class="btn bp bxs" onclick="openAsignar('${d.id}')">Asignar</button>` : ''}
+      <button class="btn bd2 bxs" onclick="delDemo('${d.id}')">×</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+function renderPersonas() {
+  const tb = document.getElementById('tbp');
+  if (!S.personas.length) { tb.innerHTML = `<tr><td colspan="6"><div class="es"><div class="es-i">👥</div><p>Sin personas aprobadas aún.</p></div></td></tr>`; return; }
+  tb.innerHTML = S.personas.map(p => `<tr>
+    <td><strong>${p.nombre}</strong></td>
+    <td style="font-size:12px">${p.email}</td>
+    <td class="hm" style="font-size:12px">${p.telefono || '—'}</td>
+    <td><span class="badge ${p.rol === 'BL' ? 'b-bl' : 'b-vd'}">${p.rol}</span></td>
+    <td>${S.demos.filter(d => d.ubicacion === p.id).length}</td>
+    <td><button class="btn bd2 bxs" onclick="delPers('${p.id}')">×</button></td>
+  </tr>`).join('');
+}
+
+function renderSolicitudes() {
+  const pend = S.solicitudes.filter(s => s.estado === 'Pendiente');
+  const hist = S.solicitudes.filter(s => s.estado !== 'Pendiente');
+  let html = '';
+  if (pend.length) {
+    html += `<div class="notice">🔔 ${pend.length} solicitud(es) esperando tu aprobación.</div>`;
+    pend.forEach(s => { html += `<div class="card" style="padding:16px;margin-bottom:10px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">${s.nombre}</div><div style="font-size:12px;color:var(--mu);margin:3px 0">${s.email} · ${s.telefono || 'sin tel.'}</div><span class="badge b-vd">${s.rol}</span><span style="font-size:11px;color:var(--mu);margin-left:8px">${fmt(s.fecha)}</span></div><div style="display:flex;gap:8px"><button class="btn bok bsm" onclick="aprobarSolicitud('${s.id}')">✓ Aprobar</button><button class="btn bd2 bsm" onclick="rechazarSolicitud('${s.id}')">✕ Rechazar</button></div></div></div>`; });
+  }
+  if (hist.length) {
+    html += `<div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">HISTORIAL</div>`;
+    hist.forEach(s => { html += `<div class="card" style="padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px">${s.nombre} · ${s.rol}</span><span class="badge ${s.estado === 'Aprobado' ? 'b-ok' : 'b-er'}">${s.estado}</span></div>`; });
+  }
+  if (!html) html = '<div class="es"><div class="es-i">✅</div><p>Sin solicitudes pendientes.</p></div>';
+  document.getElementById('sol-list').innerHTML = html;
+}
+
+function renderPendientes() {
+  const devPend = S.custodia.filter(c => c.estado === 'Pendiente' && c.tipo === 'Devolucion');
+  const asigPend = S.custodia.filter(c => c.estado === 'Pendiente' && c.tipo !== 'Devolucion');
+  let html = '';
+  if (devPend.length) {
+    html += `<div class="notice">📬 ${devPend.length} demo(s) esperando confirmación en oficina.</div>`;
+    devPend.forEach(c => { html += `<div class="card" style="padding:14px;margin-bottom:10px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><strong>${c.demoNombre}</strong><br><span style="font-size:12px;color:var(--mu)">Devuelto por: ${c.deNombre} · ${fmt(c.fecha)}</span>${c.notas?`<br><div style="font-size:12px;margin-top:4px;background:var(--bg);border-radius:6px;padding:5px 9px">💬 ${c.notas}</div>`:''}</div><button class="btn bok bsm" onclick="openAceptarDev('${c.id}')">📷 Confirmar Recepción</button></div></div>`; });
+  }
+  if (asigPend.length) {
+    html += `<div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">ESPERANDO ACEPTACIÓN</div>`;
+    asigPend.forEach(c => { html += `<div class="card" style="padding:12px 14px;margin-bottom:6px"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><div><strong>${c.demoNombre}</strong><br><span style="font-size:12px;color:var(--mu)">→ ${c.paraNombre} · ${fmt(c.fecha)}</span></div><span class="badge b-wn">Pendiente</span></div>${c.notas?`<div style="font-size:12px;margin-top:6px;background:var(--bg);border-radius:6px;padding:5px 9px">💬 ${c.notas}</div>`:''}</div>`; });
+  }
+  if (!html) html = '<div class="es"><div class="es-i">✅</div><p>Sin pendientes.</p></div>';
+  document.getElementById('pend-list').innerHTML = html;
+}
+
+function renderHist() {
+  const q = (document.getElementById('sh')?.value || '').toLowerCase();
+  const icons = { Asignacion: '📤', Transferencia: '🔄', Devolucion: '📥' };
+  // Group by demoId
+  const groups = {};
+  S.custodia.forEach(c => {
+    if (!groups[c.demoId]) groups[c.demoId] = { nombre: c.demoNombre, eventos: [] };
+    groups[c.demoId].eventos.push(c);
+  });
+  const filtered = Object.entries(groups).filter(([, g]) => g.nombre?.toLowerCase().includes(q));
+  if (!filtered.length) { document.getElementById('hist-list').innerHTML = '<div class="es"><div class="es-i">📜</div><p>Sin historial.</p></div>'; return; }
+  document.getElementById('hist-list').innerHTML = filtered.map(([demoId, g]) => {
+    const demo = S.demos.find(d => d.id === demoId);
+    const ultimo = [...g.eventos].sort((a, b) => (b.fecha||'').localeCompare(a.fecha||''))[0];
+    const estadoBadge = demo ? `<span class="badge ${demo.estado === 'En Oficina' ? 'b-ok' : demo.estado === 'En Campo' ? 'b-ac' : 'b-wn'}" style="font-size:11px">${demo.estado}</span>` : '';
+    const eventosHtml = [...g.eventos].reverse().map(c => `
+      <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--bd)">
+        <div style="width:32px;height:32px;border-radius:50%;background:${c.estado === 'Aceptado' ? 'var(--okb)' : 'var(--wnb)'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${icons[c.tipo] || '📋'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px">${c.deNombre} → ${c.paraNombre}</div>
+          <div style="font-size:11.5px;color:var(--mu);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>${c.tipo}</span><span>·</span><span>${fmt(c.fecha)}</span><span>·</span>
+            <span class="badge ${c.estado === 'Aceptado' ? 'b-ok' : 'b-wn'}" style="padding:1px 7px;font-size:10px">${c.estado}</span>
+            ${c.fechaAceptacion ? `<span>· Aceptado: ${fmt(c.fechaAceptacion)}</span>` : ''}
+          </div>
+          ${c.notas ? `<div style="font-size:12px;color:var(--t2);margin-top:6px;background:var(--bg);border-radius:6px;padding:6px 10px">💬 ${c.notas}</div>` : ''}
+          ${c.foto ? `<div style="margin-top:8px"><img src="${c.foto}" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--bd);cursor:pointer" onclick="verFotoById('${c.id}')"></div>` : ''}
+        </div>
+      </div>`).join('');
+    return `<div class="card" style="margin-bottom:12px;overflow:hidden">
+      <div onclick="toggleHist('h_${demoId}')" style="padding:14px 18px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;user-select:none">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px">${g.nombre}</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:2px">${g.eventos.length} evento${g.eventos.length !== 1 ? 's' : ''} · Último: ${fmt(ultimo?.fecha)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">${estadoBadge}<span id="arrow_${demoId}" style="color:var(--mu);font-size:18px;transition:transform .2s">▸</span></div>
+      </div>
+      <div id="h_${demoId}" style="display:none;padding:0 18px 14px;border-top:1px solid var(--bd)">${eventosHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleHist(id) {
+  const el = document.getElementById(id);
+  const demoId = id.replace('h_', '');
+  const arrow = document.getElementById('arrow_' + demoId);
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function verFotoById(custId) {
+  const c = S.custodia.find(x => x.id === custId); if (!c?.foto) return;
+  document.getElementById('foto-img').src = c.foto;
+  document.getElementById('foto-info').textContent = `${c.demoNombre} · ${c.deNombre} → ${c.paraNombre} · ${fmt(c.fechaAceptacion)}`;
+  openM('m-foto');
+}
+
+function renderConfig() {
+  document.getElementById('cfg-ejs').value = S.emailjsCfg.service || '';
+  document.getElementById('cfg-ejt').value = S.emailjsCfg.template || '';
+  document.getElementById('cfg-ejk').value = S.emailjsCfg.key || '';
+  const me = S.user?.email?.toLowerCase();
+  document.getElementById('admins-list').innerHTML = S.adminEmails.length
+    ? S.adminEmails.map(e => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bd)"><span style="flex:1;font-size:13px">${e}${e === me ? ' <span style="font-size:10px;color:var(--ac);font-weight:700">(tú)</span>' : ''}</span>${S.adminEmails.length > 1 ? `<button class="btn bd2 bxs" onclick="removeAdmin('${e}')">Quitar</button>` : '<span style="font-size:11px;color:var(--mu)">Único admin</span>'}</div>`).join('')
+    : '<p style="font-size:13px;color:var(--mu)">Sin admins.</p>';
+}
+
+function updateBadges() {
+  const sp = S.solicitudes.filter(s => s.estado === 'Pendiente').length;
+  const dp = S.custodia.filter(c => c.estado === 'Pendiente' && c.tipo === 'Devolucion').length;
+  const ds = document.getElementById('dot-sol'), dd = document.getElementById('dot-pend');
+  ds.style.display = sp ? 'inline-block' : 'none'; ds.textContent = sp;
+  dd.style.display = dp ? 'inline-block' : 'none'; dd.textContent = dp;
+}
+
+// ═══════════════════════════════════════════
+// RENDER — VENDOR
+// ═══════════════════════════════════════════
+function renderVendor() {
+  const pend = myPendientes(), mine = misDemos();
+  let ph = '', mh = '', ah = '';
+
+  if (pend.length) {
+    ph = `<div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">⚡ PENDIENTE DE ACEPTAR</div>`;
+    pend.forEach(c => { ph += `<div class="dc pendiente"><div class="dc-name">${c.demoNombre}</div><div class="dc-meta">De: ${c.deNombre} · ${fmt(c.fecha)}</div>${c.notas?`<div style="font-size:12px;background:var(--wnb);border-radius:6px;padding:6px 10px;margin-bottom:10px">💬 ${c.notas}</div>`:''}<button class="btn bok bsm" onclick="openAceptar('${c.id}')">📷 Aceptar Demo</button></div>`; });
+  }
+
+  if (mine.length) {
+    mh = `<div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:${pend.length ? '14px' : 0} 0 8px">📦 EN MI CUSTODIA</div>`;
+    mine.forEach(d => { mh += `<div class="dc en-campo"><div class="dc-name">${d.nombre}</div><div class="dc-meta">${d.serie ? d.serie + ' · ' : ''}En tu custodia</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn bs bsm" onclick="openTransferir('${d.id}')">🔄 Transferir</button><button class="btn bsm" style="background:#8B5CF6;color:#fff" onclick="openDevolver('${d.id}')">📥 Devolver</button></div></div>`; });
+  }
+
+  if (!pend.length && !mine.length) ph = '<div class="es" style="margin-top:24px"><div class="es-i">📋</div><p>No tienes demos asignados.</p></div>';
+
+  ah = `<div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px">📍 TODOS LOS DEMOS</div>`;
+  if (S.demos.length) {
+    ah += S.demos.map(d => {
+      const stColor = d.estado === 'En Oficina' ? 'var(--ok)' : d.estado === 'En Campo' ? 'var(--ac)' : 'var(--wn)';
+      const stBg = d.estado === 'En Oficina' ? 'var(--okb)' : d.estado === 'En Campo' ? 'var(--al)' : 'var(--wnb)';
+      return `<div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div><div style="font-weight:600;font-size:13.5px">${d.nombre}</div><div style="font-size:12px;color:var(--mu);margin-top:2px">${d.serie ? d.serie + ' · ' : ''}${d.custodio}</div></div>
+        <span class="badge" style="background:${stBg};color:${stColor}">${d.estado}</span>
+      </div>`;
+    }).join('');
+  } else {
+    ah += '<div class="es" style="padding:24px"><div class="es-i">📋</div><p>Sin demos registrados.</p></div>';
+  }
+
+  document.getElementById('v-pend-sec').innerHTML = ph;
+  document.getElementById('v-mine-sec').innerHTML = mh;
+  document.getElementById('v-all-sec').innerHTML = ah;
+}
+
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function filterT(tid, iid) { const q = document.getElementById(iid).value.toLowerCase(); document.querySelectorAll(`#${tid} tbody tr`).forEach(tr => { tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none'; }); }
+
+const vtitles = { dashboard: 'Ubicaciones', demos: 'Demos', personas: 'Personas', solicitudes: 'Solicitudes', pendientes: 'Custodia Pendiente', historial: 'Historial', config: 'Configuración' };
+
+function nav(view) {
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(x => x.classList.remove('active'));
+  document.getElementById('v-' + view)?.classList.add('active');
+  document.querySelectorAll('.ni').forEach(n => { if (n.getAttribute('onclick')?.includes(`'${view}'`)) n.classList.add('active'); });
+  document.getElementById('tbtitle').textContent = vtitles[view] || view;
+  closeSb(); renderAll();
+}
+
+function openSb() { document.getElementById('sb').classList.add('open'); document.getElementById('so').classList.add('open'); }
+function closeSb() { document.getElementById('sb').classList.remove('open'); document.getElementById('so').classList.remove('open'); }
+function openM(id) { document.getElementById(id).classList.add('open'); }
+function closeM(id) { document.getElementById(id).classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); });
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id)?.classList.add('active'); }
+function setLoad(msg) { document.getElementById('load-msg').textContent = msg; show('sload'); }
+function v(id) { return document.getElementById(id)?.value?.trim() || ''; }
+function fmt(d) { if (!d) return '—'; try { return new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return d; } }
+function toast(msg, type = '') { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (type ? ' ' + type : ''); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3200); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+function today() { return new Date().toISOString().split('T')[0]; }
+</script>
+</body>
+</html>

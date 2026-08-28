@@ -227,7 +227,7 @@ export default function ActivoDetalle() {
     return (
       <div className="space-y-3">
         <Aviso tono="critical">Este activo no existe o no tienes acceso a él.</Aviso>
-        <Link to="/activos" className="text-sm underline" style={{ color: 'var(--series-1)' }}>
+        <Link to="/mantenimiento/activos" className="text-sm underline" style={{ color: 'var(--series-1)' }}>
           ← Volver a activos
         </Link>
       </div>
@@ -445,7 +445,7 @@ export default function ActivoDetalle() {
           </div>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             Se crea como orden programada. Para iniciarla y registrar el gasto ve a{' '}
-            <Link to="/plan" className="underline">Plan de mantenimiento</Link>.
+            <Link to="/mantenimiento/plan" className="underline">Plan de mantenimiento</Link>.
           </p>
         </form>
       </Modal>

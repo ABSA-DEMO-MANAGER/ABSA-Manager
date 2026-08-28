@@ -135,7 +135,7 @@ export default function SucursalDetalle() {
     return (
       <div className="space-y-3">
         <Aviso tono="critical">Esta sucursal no existe o no tienes acceso a ella.</Aviso>
-        <Link to="/sucursales" className="text-sm underline" style={{ color: 'var(--series-1)' }}>
+        <Link to="/mantenimiento/sucursales" className="text-sm underline" style={{ color: 'var(--series-1)' }}>
           ← Volver a sucursales
         </Link>
       </div>
@@ -148,7 +148,7 @@ export default function SucursalDetalle() {
 
   return (
     <div className="space-y-5">
-      <button onClick={() => navigate('/sucursales')} className="text-sm underline"
+      <button onClick={() => navigate('/mantenimiento/sucursales')} className="text-sm underline"
               style={{ color: 'var(--text-secondary)' }}>
         ← Sucursales
       </button>
@@ -172,7 +172,7 @@ export default function SucursalDetalle() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Boton variant="ghost" onClick={() => navigate(`/gastos?sucursal=${id}`)}>
+          <Boton variant="ghost" onClick={() => navigate(`/mantenimiento/gastos?sucursal=${id}`)}>
             Ver gastos desglosados →
           </Boton>
           {esAdmin && periodo?.modo === 'mes' && (
@@ -198,7 +198,7 @@ export default function SucursalDetalle() {
       )}
 
       <button
-        onClick={() => navigate(`/gastos?sucursal=${id}`)}
+        onClick={() => navigate(`/mantenimiento/gastos?sucursal=${id}`)}
         className="grid w-full grid-cols-2 gap-3 rounded-xl text-left lg:grid-cols-4"
         title="Ver el desglose de gastos de esta sucursal"
       >
@@ -250,7 +250,7 @@ export default function SucursalDetalle() {
             {activosFiltrados.map((a) => (
               <button
                 key={a.id}
-                onClick={() => navigate(`/activos/${a.id}`)}
+                onClick={() => navigate(`/mantenimiento/activos/${a.id}`)}
                 className="flex flex-col gap-2 rounded-xl border p-4 text-left transition hover:shadow-md"
                 style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
               >

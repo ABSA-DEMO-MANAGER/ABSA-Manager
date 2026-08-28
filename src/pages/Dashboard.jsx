@@ -268,7 +268,7 @@ export default function Dashboard() {
             <Aviso tono="critical">
               El último gasto capturado es de <strong>{mesCorto(m.ultimoMesGlobal)}</strong>
               {mesesSinCaptura === 1 ? ' — hay un mes sin detalle.' : ` — hay ${mesesSinCaptura} meses sin detalle.`}{' '}
-              <Link to="/gastos" className="underline">Capturar ahora</Link>
+              <Link to="/mantenimiento/gastos" className="underline">Capturar ahora</Link>
             </Aviso>
           )}
           {m.sobregiro.map((s) => (
@@ -284,7 +284,7 @@ export default function Dashboard() {
           {m.porRevisar > 0 && (
             <Aviso tono="warning">
               {m.porRevisar} {m.porRevisar === 1 ? 'movimiento marcado' : 'movimientos marcados'} para revisión en este periodo.{' '}
-              <Link to="/gastos?revisar=1" className="underline">Ver</Link>
+              <Link to="/mantenimiento/gastos?revisar=1" className="underline">Ver</Link>
             </Aviso>
           )}
         </div>

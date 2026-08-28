@@ -194,7 +194,7 @@ export default function Activos() {
           </div>
 
           <Tabla
-            onRowClick={(a) => navigate(`/activos/${a.id}`)}
+            onRowClick={(a) => navigate(`/mantenimiento/activos/${a.id}`)}
             vacio="Ningún equipo coincide con el filtro."
             columnas={[
               { key: 'codigo', header: 'Código', nowrap: true, render: (a) => a.codigo ?? '—' },

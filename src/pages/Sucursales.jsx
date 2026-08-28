@@ -107,7 +107,7 @@ export default function Sucursales() {
         {visibles.map((s) => (
           <button
             key={s.id}
-            onClick={() => navigate(`/sucursales/${s.id}`)}
+            onClick={() => navigate(`/mantenimiento/sucursales/${s.id}`)}
             className="group flex flex-col gap-3 rounded-xl border p-4 text-left transition hover:shadow-md sm:p-5"
             style={{ background: 'var(--surface-1)', borderColor: 'var(--border)' }}
           >
