@@ -10,6 +10,7 @@ import { useAuth } from './auth';
 export function useFlotaPerfil() {
   const { sesion } = useAuth();
   const [flotaPerfil, setFlotaPerfil] = useState(null);
+  const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -18,19 +19,30 @@ export function useFlotaPerfil() {
 
     (async () => {
       const uid = sesion.user.id;
-      const { data } = await supabase.from('flota_perfiles')
+      const { data, error: errSelect } = await supabase.from('flota_perfiles')
         .select('perfil_id, rol, vehiculo_asignado_id')
         .eq('perfil_id', uid).maybeSingle();
 
       if (!vivo) return;
 
+      if (errSelect) {
+        setError(errSelect.message);
+        setCargando(false);
+        return;
+      }
+
       if (data) {
         setFlotaPerfil(data);
       } else {
-        const { data: nuevo } = await supabase.from('flota_perfiles')
+        const { data: nuevo, error: errInsert } = await supabase.from('flota_perfiles')
           .insert({ perfil_id: uid })
           .select('perfil_id, rol, vehiculo_asignado_id').maybeSingle();
         if (!vivo) return;
+        if (errInsert) {
+          setError(errInsert.message);
+          setCargando(false);
+          return;
+        }
         setFlotaPerfil(nuevo ?? { perfil_id: uid, rol: 'pendiente', vehiculo_asignado_id: null });
       }
       setCargando(false);
@@ -42,5 +54,5 @@ export function useFlotaPerfil() {
   const esFlotaAdmin = flotaPerfil?.rol === 'admin';
   const aprobado = !!flotaPerfil && ['admin', 'gerente', 'usuario'].includes(flotaPerfil.rol);
 
-  return { flotaPerfil, cargando, esFlotaAdmin, aprobado };
+  return { flotaPerfil, cargando, esFlotaAdmin, aprobado, error };
 }

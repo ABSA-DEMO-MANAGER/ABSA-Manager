@@ -16,6 +16,7 @@ import FlotasLayout from './pages/flotas/FlotasLayout';
 import Unidades from './pages/flotas/Unidades';
 import UnidadDetalle from './pages/flotas/UnidadDetalle';
 import UsuariosFlotas from './pages/flotas/UsuariosFlotas';
+import Tickets from './pages/flotas/Tickets';
 import { Cargando } from './components/ui';
 
 function Rutas() {
@@ -45,6 +46,7 @@ function Rutas() {
         <Route index element={<Unidades />} />
         <Route path="unidades/:id" element={<UnidadDetalle />} />
         <Route path="usuarios" element={<UsuariosFlotas />} />
+        <Route path="tickets" element={<Tickets />} />
         <Route path="*" element={<Unidades />} />
       </Route>
 

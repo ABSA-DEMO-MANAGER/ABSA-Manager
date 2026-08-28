@@ -1,19 +1,36 @@
 import { Link } from 'react-router-dom';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import AppShell from '../../components/AppShell';
-import { Cargando } from '../../components/ui';
+import { Cargando, Aviso } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 
 const NAV = [
   { to: '/flotas', label: 'Unidades', icono: '🚚', end: true },
+  { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
 ];
 
 const ROLES = { admin: 'Administrador', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 
 export default function FlotasLayout() {
-  const { flotaPerfil, cargando, aprobado } = useFlotaPerfil();
+  const { flotaPerfil, cargando, aprobado, error } = useFlotaPerfil();
 
   if (cargando) return <Cargando texto="Cargando Flotas…" />;
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6" style={{ background: 'var(--plane)' }}>
+        <div className="w-full max-w-md space-y-3">
+          <Aviso tono="critical">
+            No se pudo conectar el módulo de Flotas a la base de datos: {error}
+            <br />Es probable que falte correr <strong>supabase/13-flotas-fase1.sql</strong> en Supabase.
+          </Aviso>
+          <Link to="/" className="block text-center text-xs underline" style={{ color: 'var(--text-muted)' }}>
+            ← ABSA Manager
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!aprobado) {
     return (

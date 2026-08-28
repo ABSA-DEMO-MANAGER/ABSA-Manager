@@ -29,6 +29,12 @@ const FORM_VACIO = {
 
 const DOC_VACIO = { tipo: '', referencia: '', emision: '', vence: '', monto: '' };
 
+const SERV_VACIO = {
+  fecha: hoyISO(), tipo: 'preventivo', concepto: '', taller: '', km: '',
+  mano_obra: '', refacciones: '', descripcion: '',
+  proximo_servicio_km: '', proximo_servicio_fecha: '',
+};
+
 export default function UnidadDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -45,16 +51,22 @@ export default function UnidadDetalle() {
   const [modalDoc, setModalDoc] = useState(false);
   const [formDoc, setFormDoc] = useState(DOC_VACIO);
 
+  const [modalServ, setModalServ] = useState(false);
+  const [formServ, setFormServ] = useState(SERV_VACIO);
+
   async function cargar() {
-    const [v, s, docs] = await Promise.all([
+    const [v, s, docs, servs] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
+      supabase.from('flota_servicios')
+        .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones')
+        .eq('vehiculo_id', id).order('fecha', { ascending: false }),
     ]);
-    const err = v.error || s.error || docs.error;
+    const err = v.error || s.error || docs.error || servs.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
-    setD({ vehiculo: v.data, sucursales: s.data, documentos: docs.data });
+    setD({ vehiculo: v.data, sucursales: s.data, documentos: docs.data, servicios: servs.data });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
@@ -141,6 +153,42 @@ export default function UnidadDetalle() {
     if (!confirm('¿Borrar este documento?')) return;
     await supabase.from('flota_documentos').delete().eq('id', docId);
     cargar();
+  }
+
+  function abrirServicio() {
+    setFormServ({ ...SERV_VACIO, km: d.vehiculo.km ?? '' });
+    setFormError(null); setModalServ(true);
+  }
+
+  async function guardarServicio(e) {
+    e.preventDefault();
+    setFormError(null);
+    if (!formServ.concepto.trim()) return setFormError('Escribe el concepto del servicio.');
+
+    setGuardando(true);
+    const { error: errServ } = await supabase.from('flota_servicios').insert({
+      vehiculo_id: Number(id),
+      fecha: formServ.fecha, tipo: formServ.tipo, concepto: formServ.concepto.trim(),
+      descripcion: formServ.descripcion.trim() || null, taller: formServ.taller.trim() || null,
+      km: formServ.km === '' ? null : Number(formServ.km),
+      mano_obra: formServ.mano_obra === '' ? 0 : Number(formServ.mano_obra),
+      refacciones: formServ.refacciones === '' ? 0 : Number(formServ.refacciones),
+    });
+    if (errServ) { setGuardando(false); return setFormError(errServ.message); }
+
+    // igual que en la versión original: si el km del servicio es mayor, actualiza
+    // el kilometraje de la unidad, y si se captura próximo servicio, lo guarda.
+    const patch = {};
+    const kmServ = formServ.km === '' ? null : Number(formServ.km);
+    if (kmServ !== null && kmServ > Number(d.vehiculo.km ?? 0)) patch.km = kmServ;
+    if (formServ.proximo_servicio_km !== '') patch.proximo_servicio_km = Number(formServ.proximo_servicio_km);
+    if (formServ.proximo_servicio_fecha !== '') patch.proximo_servicio_fecha = formServ.proximo_servicio_fecha;
+    if (Object.keys(patch).length > 0) {
+      await supabase.from('flota_vehiculos').update(patch).eq('id', id);
+    }
+
+    setGuardando(false);
+    setModalServ(false); cargar();
   }
 
   if (error === 'no-existe') {
@@ -253,6 +301,33 @@ export default function UnidadDetalle() {
         </Card>
       </div>
 
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-base font-semibold tracking-tight">Servicios</h2>
+          {esFlotaAdmin && <button onClick={abrirServicio} className="text-xs underline" style={{ color: 'var(--series-1)' }}>+ Registrar servicio</button>}
+        </div>
+        <Card className="!p-0">
+          <div className="p-4 sm:p-5">
+            <Tabla
+              vacio="Sin servicios registrados todavía."
+              columnas={[
+                { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta(s.fecha) },
+                { key: 'concepto', header: 'Concepto', render: (s) => (
+                    <div>
+                      <div>{s.concepto}</div>
+                      {s.taller && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.taller}</div>}
+                    </div>) },
+                { key: 'tipo', header: 'Tipo', nowrap: true,
+                  render: (s) => <Badge color={s.tipo === 'preventivo' ? 'var(--series-1)' : 'var(--serious)'}>{s.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}</Badge> },
+                { key: 'km', header: 'Km', align: 'right', render: (s) => s.km ? Number(s.km).toLocaleString('es-MX') : '—' },
+                { key: 'total', header: 'Costo', align: 'right', render: (s) => money(Number(s.mano_obra) + Number(s.refacciones)) },
+              ]}
+              filas={d.servicios}
+            />
+          </div>
+        </Card>
+      </div>
+
       {/* ---------------- Editar unidad ---------------- */}
       <Modal abierto={modalEditar} onClose={() => setModalEditar(false)} titulo="Editar unidad" ancho="max-w-2xl">
         {form && (
@@ -360,6 +435,61 @@ export default function UnidadDetalle() {
           <div className="flex justify-end gap-2 pt-1">
             <Boton type="button" variant="ghost" onClick={() => setModalDoc(false)}>Cancelar</Boton>
             <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Agregar'}</Boton>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ---------------- Registrar servicio ---------------- */}
+      <Modal abierto={modalServ} onClose={() => setModalServ(false)} titulo="Registrar servicio">
+        <form onSubmit={guardarServicio} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Fecha" required>
+              <Input type="date" value={formServ.fecha} required onChange={(e) => setFormServ({ ...formServ, fecha: e.target.value })} />
+            </Campo>
+            <Campo label="Tipo">
+              <Select value={formServ.tipo} onChange={(e) => setFormServ({ ...formServ, tipo: e.target.value })}>
+                <option value="preventivo">Preventivo</option>
+                <option value="correctivo">Correctivo</option>
+              </Select>
+            </Campo>
+          </div>
+          <Campo label="Concepto" required hint="Ej. Servicio 80,000 km">
+            <Input value={formServ.concepto} required onChange={(e) => setFormServ({ ...formServ, concepto: e.target.value })} />
+          </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Taller">
+              <Input value={formServ.taller} onChange={(e) => setFormServ({ ...formServ, taller: e.target.value })} />
+            </Campo>
+            <Campo label="Kilometraje">
+              <Input inputMode="numeric" value={formServ.km} onChange={(e) => setFormServ({ ...formServ, km: e.target.value })} />
+            </Campo>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Mano de obra">
+              <Input inputMode="decimal" value={formServ.mano_obra} placeholder="0.00" onChange={(e) => setFormServ({ ...formServ, mano_obra: e.target.value })} />
+            </Campo>
+            <Campo label="Refacciones">
+              <Input inputMode="decimal" value={formServ.refacciones} placeholder="0.00" onChange={(e) => setFormServ({ ...formServ, refacciones: e.target.value })} />
+            </Campo>
+          </div>
+          <Campo label="Descripción">
+            <Textarea rows={2} value={formServ.descripcion} onChange={(e) => setFormServ({ ...formServ, descripcion: e.target.value })} />
+          </Campo>
+          <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio (opcional)</div>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo label="Kilometraje">
+                <Input inputMode="numeric" value={formServ.proximo_servicio_km} onChange={(e) => setFormServ({ ...formServ, proximo_servicio_km: e.target.value })} />
+              </Campo>
+              <Campo label="Fecha">
+                <Input type="date" value={formServ.proximo_servicio_fecha} onChange={(e) => setFormServ({ ...formServ, proximo_servicio_fecha: e.target.value })} />
+              </Campo>
+            </div>
+          </div>
+          {formError && <Aviso tono="critical">{formError}</Aviso>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Boton type="button" variant="ghost" onClick={() => setModalServ(false)}>Cancelar</Boton>
+            <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar servicio'}</Boton>
           </div>
         </form>
       </Modal>
