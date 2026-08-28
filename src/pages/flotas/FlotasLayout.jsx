@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 const NAV = [
   { to: '/flotas', label: 'Unidades', icono: '🚚', end: true },
   { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+  { to: '/flotas/siniestros', label: 'Siniestros', icono: '⚠' },
   { to: '/flotas/costos', label: 'Costos', icono: '💵' },
 ];
 
