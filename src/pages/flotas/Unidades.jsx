@@ -14,6 +14,7 @@ const FORM_VACIO = {
   codigo: '', sucursal_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
   conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
+  tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -100,6 +101,8 @@ export default function Unidades() {
       conductor_correo: form.conductor_correo.trim() || null,
       conductor_licencia: form.conductor_licencia.trim() || null,
       licencia_vence: form.licencia_vence || null,
+      tipo_prestacion: form.tipo_prestacion.trim() || null, puesto: form.puesto.trim() || null,
+      jefe_directo: form.jefe_directo.trim() || null, departamento: form.departamento.trim() || null,
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -232,6 +235,14 @@ export default function Unidades() {
             <Campo label="Vencimiento de licencia" hint="Opcional">
               <Input type="date" value={form.licencia_vence} onChange={(e) => setForm({ ...form, licencia_vence: e.target.value })} />
             </Campo>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Campo label="Puesto"><Input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} /></Campo>
+              <Campo label="Departamento"><Input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} /></Campo>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Campo label="Jefe directo"><Input value={form.jefe_directo} onChange={(e) => setForm({ ...form, jefe_directo: e.target.value })} /></Campo>
+              <Campo label="Tipo de prestación"><Input value={form.tipo_prestacion} onChange={(e) => setForm({ ...form, tipo_prestacion: e.target.value })} /></Campo>
+            </div>
           </div>
 
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>

@@ -24,6 +24,7 @@ const FORM_VACIO = {
   codigo: '', sucursal_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
   conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
+  tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -55,18 +56,21 @@ export default function UnidadDetalle() {
   const [formServ, setFormServ] = useState(SERV_VACIO);
 
   async function cargar() {
-    const [v, s, docs, servs] = await Promise.all([
+    const [v, s, docs, servs, hist] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
       supabase.from('flota_servicios')
         .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones')
         .eq('vehiculo_id', id).order('fecha', { ascending: false }),
+      supabase.from('flota_conductor_historial')
+        .select('id, conductor_nombre, conductor_telefono, puesto, departamento, jefe_directo, tipo_prestacion, hasta')
+        .eq('vehiculo_id', id).order('hasta', { ascending: false }),
     ]);
-    const err = v.error || s.error || docs.error || servs.error;
+    const err = v.error || s.error || docs.error || servs.error || hist.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
-    setD({ vehiculo: v.data, sucursales: s.data, documentos: docs.data, servicios: servs.data });
+    setD({ vehiculo: v.data, sucursales: s.data, documentos: docs.data, servicios: servs.data, historialConductores: hist.data });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
@@ -94,6 +98,8 @@ export default function UnidadDetalle() {
       conductor_nombre: v.conductor_nombre ?? '', conductor_telefono: v.conductor_telefono ?? '',
       conductor_correo: v.conductor_correo ?? '', conductor_licencia: v.conductor_licencia ?? '',
       licencia_vence: v.licencia_vence ?? '',
+      tipo_prestacion: v.tipo_prestacion ?? '', puesto: v.puesto ?? '',
+      jefe_directo: v.jefe_directo ?? '', departamento: v.departamento ?? '',
       proximo_servicio_km: v.proximo_servicio_km ?? '', proximo_servicio_fecha: v.proximo_servicio_fecha ?? '',
       notas: v.notas ?? '',
     });
@@ -118,6 +124,8 @@ export default function UnidadDetalle() {
       conductor_correo: form.conductor_correo.trim() || null,
       conductor_licencia: form.conductor_licencia.trim() || null,
       licencia_vence: form.licencia_vence || null,
+      tipo_prestacion: form.tipo_prestacion.trim() || null, puesto: form.puesto.trim() || null,
+      jefe_directo: form.jefe_directo.trim() || null, departamento: form.departamento.trim() || null,
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -260,6 +268,8 @@ export default function UnidadDetalle() {
               ['Nombre', v.conductor_nombre], ['Teléfono', v.conductor_telefono], ['Correo', v.conductor_correo],
               ['Licencia', v.conductor_licencia],
               ['Vence licencia', v.licencia_vence && fechaCorta(v.licencia_vence)],
+              ['Puesto', v.puesto], ['Departamento', v.departamento],
+              ['Jefe directo', v.jefe_directo], ['Tipo de prestación', v.tipo_prestacion],
             ].filter(([, val]) => val).map(([k, val]) => (
               <div key={k} className="flex justify-between gap-4 border-b pb-2" style={{ borderColor: 'var(--border)' }}>
                 <dt style={{ color: 'var(--text-secondary)' }}>{k}</dt>
@@ -271,6 +281,31 @@ export default function UnidadDetalle() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin conductor asignado.</p>
         )}
       </Card>
+
+      {d.historialConductores.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-base font-semibold tracking-tight">Historial de conductores</h2>
+          <Card className="!p-0">
+            <div className="p-4 sm:p-5">
+              <Tabla
+                columnas={[
+                  { key: 'conductor_nombre', header: 'Conductor', render: (h) => (
+                      <div>
+                        <div>{h.conductor_nombre || '—'}</div>
+                        {h.conductor_telefono && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{h.conductor_telefono}</div>}
+                      </div>) },
+                  { key: 'puesto', header: 'Puesto', render: (h) => h.puesto || '—' },
+                  { key: 'departamento', header: 'Departamento', render: (h) => h.departamento || '—' },
+                  { key: 'jefe_directo', header: 'Jefe directo', render: (h) => h.jefe_directo || '—' },
+                  { key: 'tipo_prestacion', header: 'Tipo de prestación', render: (h) => h.tipo_prestacion || '—' },
+                  { key: 'hasta', header: 'Hasta', nowrap: true, render: (h) => fechaCorta(h.hasta?.slice(0, 10)) },
+                ]}
+                filas={d.historialConductores}
+              />
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div>
         <div className="mb-2 flex items-center justify-between">
@@ -388,6 +423,14 @@ export default function UnidadDetalle() {
               <Campo label="Vencimiento de licencia">
                 <Input type="date" value={form.licencia_vence} onChange={(e) => setForm({ ...form, licencia_vence: e.target.value })} />
               </Campo>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Campo label="Puesto"><Input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} /></Campo>
+                <Campo label="Departamento"><Input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} /></Campo>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Campo label="Jefe directo"><Input value={form.jefe_directo} onChange={(e) => setForm({ ...form, jefe_directo: e.target.value })} /></Campo>
+                <Campo label="Tipo de prestación"><Input value={form.tipo_prestacion} onChange={(e) => setForm({ ...form, tipo_prestacion: e.target.value })} /></Campo>
+              </div>
             </div>
 
             <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
