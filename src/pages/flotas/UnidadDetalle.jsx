@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
-import { subirArchivo } from '../../lib/storage';
+import { subirArchivo, borrarArchivo } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
@@ -58,14 +58,17 @@ export default function UnidadDetalle() {
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
-  // Asignar / reasignar / desasignar conductor con inspección de fotos
+  // Asignar / reasignar / desasignar conductor con galería de fotos
   const [modalReasig, setModalReasig] = useState(null); // 'asignar' | 'reasignar' | 'desasignar'
   const [conductorForm, setConductorForm] = useState(conductorVacio());
   const [inspKm, setInspKm] = useState('');
-  const [inspNotas, setInspNotas] = useState('');
-  const [fotosDev, setFotosDev] = useState(fotosVacias());
-  const [fotosEnt, setFotosEnt] = useState(fotosVacias());
+  const [fotosNuevas, setFotosNuevas] = useState(fotosVacias());
   const [reasigError, setReasigError] = useState(null);
+
+  // Actualizar galería sin cambiar de conductor
+  const [modalGaleria, setModalGaleria] = useState(false);
+  const [fotosGaleria, setFotosGaleria] = useState(fotosVacias());
+  const [galeriaError, setGaleriaError] = useState(null);
 
   const [modalDoc, setModalDoc] = useState(false);
   const [formDoc, setFormDoc] = useState(DOC_VACIO);
@@ -84,16 +87,16 @@ export default function UnidadDetalle() {
       supabase.from('flota_conductor_historial')
         .select('id, conductor_nombre, conductor_telefono, puesto, departamento, jefe_directo, tipo_prestacion, hasta')
         .eq('vehiculo_id', id).order('hasta', { ascending: false }),
-      supabase.from('flota_inspecciones')
-        .select('id, tipo, conductor_nombre, km, notas, creado_en, flota_inspeccion_fotos(id, punto, archivo_path)')
-        .eq('vehiculo_id', id).order('creado_en', { ascending: false }),
+      supabase.from('flota_vehiculo_fotos')
+        .select('id, punto, archivo_path, creado_en')
+        .eq('vehiculo_id', id).order('creado_en', { ascending: true }),
     ]);
     const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
     setD({
       vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
-      historialConductores: hist.data, inspecciones: insp.data,
+      historialConductores: hist.data, galeria: insp.data,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
@@ -147,66 +150,50 @@ export default function UnidadDetalle() {
     setModalEditar(false); cargar();
   }
 
-  // ---- Asignar / reasignar / desasignar conductor con inspección ----
+  // ---- Galería de fotos del estado de la unidad ----
+  async function subirFotos(fotos) {
+    for (const punto of PUNTOS_TODOS) {
+      for (const file of fotos[punto]) {
+        const ruta = await subirArchivo(file, `flota/${id}/galeria`);
+        await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: Number(id), punto, archivo_path: ruta });
+      }
+    }
+  }
+
+  async function borrarGaleriaActual() {
+    const actuales = d.galeria ?? [];
+    if (actuales.length === 0) return;
+    for (const f of actuales) { try { await borrarArchivo(f.archivo_path); } catch { /* ignora */ } }
+    await supabase.from('flota_vehiculo_fotos').delete().in('id', actuales.map((f) => f.id));
+  }
+
+  // ---- Asignar / reasignar / desasignar conductor ----
   function abrirReasignar(modo) {
     const v = d.vehiculo;
     setModalReasig(modo);
     setReasigError(null);
     setInspKm(v.km ?? '');
-    setInspNotas('');
-    setFotosDev(fotosVacias());
-    setFotosEnt(fotosVacias());
-    if (modo === 'reasignar' || modo === 'asignar') {
-      setConductorForm(conductorVacio());
-    } else {
-      setConductorForm(conductorVacio()); // desasignar: no se captura conductor nuevo
-    }
-  }
-
-  async function subirFotos(inspeccionId, fotos) {
-    for (const punto of PUNTOS_TODOS) {
-      for (const file of fotos[punto]) {
-        const ruta = await subirArchivo(file, `flota/${id}/inspecciones/${inspeccionId}`);
-        await supabase.from('flota_inspeccion_fotos').insert({ inspeccion_id: inspeccionId, punto, archivo_path: ruta });
-      }
-    }
+    setFotosNuevas(fotosVacias());
+    setConductorForm(conductorVacio());
   }
 
   async function ejecutarReasignar(e) {
     e.preventDefault();
     setReasigError(null);
-    const v = d.vehiculo;
-    const hayActual = !!v.conductor_nombre;
     const asignaNuevo = modalReasig === 'asignar' || modalReasig === 'reasignar';
 
-    if (hayActual && cuentaFotos(fotosDev) === 0) {
-      return setReasigError('Sube al menos una foto de cómo se devolvió la unidad.');
+    if (cuentaFotos(fotosNuevas) === 0) {
+      return setReasigError('Sube al menos una foto del estado actual de la unidad.');
     }
     if (asignaNuevo && !conductorForm.nombre.trim()) {
       return setReasigError('Escribe el nombre del nuevo conductor.');
-    }
-    if (asignaNuevo && cuentaFotos(fotosEnt) === 0) {
-      return setReasigError('Sube al menos una foto de cómo se entrega la unidad al nuevo conductor.');
     }
 
     setGuardando(true);
     try {
       const kmNum = inspKm === '' ? null : Number(inspKm);
-      const registrado_por = flotaPerfil?.perfil_id ?? null;
 
-      // 1. Inspección de devolución (si había conductor)
-      let inspDevId = null;
-      if (hayActual) {
-        const { data: inspDev, error: eDev } = await supabase.from('flota_inspecciones').insert({
-          vehiculo_id: Number(id), tipo: 'devolucion', conductor_nombre: v.conductor_nombre,
-          km: kmNum, notas: inspNotas.trim() || null, registrado_por,
-        }).select('id').single();
-        if (eDev) throw eDev;
-        inspDevId = inspDev.id;
-        await subirFotos(inspDevId, fotosDev);
-      }
-
-      // 2. Actualizar la unidad (dispara el archivado del conductor saliente)
+      // 1. Actualizar la unidad (dispara el archivado del conductor saliente)
       const patch = asignaNuevo
         ? {
             conductor_nombre: conductorForm.nombre.trim(),
@@ -228,29 +215,37 @@ export default function UnidadDetalle() {
       const { error: eUpd } = await supabase.from('flota_vehiculos').update(patch).eq('id', id);
       if (eUpd) throw eUpd;
 
-      // 3. Enlazar la devolución con el registro de historial recién creado
-      if (inspDevId) {
-        const { data: hist } = await supabase.from('flota_conductor_historial')
-          .select('id').eq('vehiculo_id', id).order('hasta', { ascending: false }).limit(1).maybeSingle();
-        if (hist?.id) {
-          await supabase.from('flota_inspecciones').update({ historial_id: hist.id }).eq('id', inspDevId);
-        }
-      }
-
-      // 4. Inspección de entrega (si se asignó un conductor nuevo)
-      if (asignaNuevo) {
-        const { data: inspEnt, error: eEnt } = await supabase.from('flota_inspecciones').insert({
-          vehiculo_id: Number(id), tipo: 'entrega', conductor_nombre: conductorForm.nombre.trim(),
-          km: kmNum, notas: inspNotas.trim() || null, registrado_por,
-        }).select('id').single();
-        if (eEnt) throw eEnt;
-        await subirFotos(inspEnt.id, fotosEnt);
-      }
+      // 2. La galería nueva reemplaza a la anterior (se borran las fotos pasadas)
+      await borrarGaleriaActual();
+      await subirFotos(fotosNuevas);
 
       setModalReasig(null);
       cargar();
     } catch (err) {
       setReasigError(err.message || 'No se pudo completar la operación.');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  function abrirGaleria() {
+    setGaleriaError(null);
+    setFotosGaleria(fotosVacias());
+    setModalGaleria(true);
+  }
+
+  async function guardarGaleria(e) {
+    e.preventDefault();
+    setGaleriaError(null);
+    if (cuentaFotos(fotosGaleria) === 0) return setGaleriaError('Sube al menos una foto.');
+    setGuardando(true);
+    try {
+      await borrarGaleriaActual();
+      await subirFotos(fotosGaleria);
+      setModalGaleria(false);
+      cargar();
+    } catch (err) {
+      setGaleriaError(err.message || 'No se pudieron guardar las fotos.');
     } finally {
       setGuardando(false);
     }
@@ -415,44 +410,36 @@ export default function UnidadDetalle() {
         )}
       </Card>
 
-      {d.inspecciones?.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-base font-semibold tracking-tight">Inspecciones de entrega / devolución</h2>
-          <div className="space-y-3">
-            {d.inspecciones.map((insp) => (
-              <Card key={insp.id}>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Badge color={insp.tipo === 'entrega' ? 'var(--good)' : 'var(--serious)'}>
-                    {insp.tipo === 'entrega' ? 'Entrega' : 'Devolución'}
-                  </Badge>
-                  <span className="text-sm font-medium">{insp.conductor_nombre || '—'}</span>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {fechaCorta(insp.creado_en?.slice(0, 10))}
-                    {insp.km != null && ` · ${Number(insp.km).toLocaleString('es-MX')} km`}
-                  </span>
-                </div>
-                {insp.notas && <p className="mb-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{insp.notas}</p>}
-                {PUNTOS_TODOS.map((punto) => {
-                  const fotos = (insp.flota_inspeccion_fotos ?? []).filter((f) => f.punto === punto);
-                  if (fotos.length === 0) return null;
-                  return (
-                    <div key={punto} className="mb-2">
-                      <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</div>
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {fotos.map((f) => (
-                          <div key={f.id} className="aspect-square">
-                            <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
-                          </div>
-                        ))}
-                      </div>
+      <Card
+        title="Galería del vehículo"
+        subtitle="Estado actual de la unidad. Al reasignar o desasignar se toman fotos nuevas y estas se reemplazan."
+        right={esFlotaAdmin && (d.galeria?.length > 0) && (
+          <Boton variant="ghost" onClick={abrirGaleria}>Actualizar fotos</Boton>
+        )}
+      >
+        {d.galeria?.length > 0 ? (
+          PUNTOS_TODOS.map((punto) => {
+            const fotos = d.galeria.filter((f) => f.punto === punto);
+            if (fotos.length === 0) return null;
+            return (
+              <div key={punto} className="mb-3">
+                <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</div>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {fotos.map((f) => (
+                    <div key={f.id} className="aspect-square">
+                      <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
                     </div>
-                  );
-                })}
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Sin fotos todavía. Se cargan al asignar un conductor.
+          </p>
+        )}
+      </Card>
 
       {d.historialConductores.length > 0 && (
         <div>
@@ -701,17 +688,39 @@ export default function UnidadDetalle() {
       >
         {modalReasig && (
           <form onSubmit={ejecutarReasignar} className="space-y-4">
-            {v.conductor_nombre && (
+            {d.galeria?.length > 0 && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--serious)' }}>
-                  Inspección de devolución — {v.conductor_nombre}
+                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Cómo se entregó {v.conductor_nombre ? `a ${v.conductor_nombre}` : ''} (galería actual)
                 </div>
-                <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Obligatorio: sube fotos de cómo se devuelve la unidad. Se comparan contra las de entrega.
-                </p>
-                <ChecklistFotos valor={fotosDev} onChange={setFotosDev} />
+                {PUNTOS_TODOS.map((punto) => {
+                  const fotos = d.galeria.filter((f) => f.punto === punto);
+                  if (fotos.length === 0) return null;
+                  return (
+                    <div key={punto} className="mb-2">
+                      <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>{punto}</div>
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                        {fotos.map((f) => (
+                          <div key={f.id} className="aspect-square">
+                            <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
+
+            <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+              <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>
+                {v.conductor_nombre ? 'Fotos nuevas (cómo se devuelve la unidad)' : 'Fotos del estado actual de la unidad'}
+              </div>
+              <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                Obligatorio. Al aceptar, estas reemplazan a la galería anterior (las fotos pasadas se borran).
+              </p>
+              <ChecklistFotos valor={fotosNuevas} onChange={setFotosNuevas} />
+            </div>
 
             {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
@@ -748,36 +757,38 @@ export default function UnidadDetalle() {
               </div>
             )}
 
-            {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
-              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>Inspección de entrega</div>
-                <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Obligatorio: sube fotos de cómo se entrega la unidad al nuevo conductor.
-                </p>
-                <ChecklistFotos valor={fotosEnt} onChange={setFotosEnt} />
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-3">
               <Campo label="Kilometraje actual">
                 <Input inputMode="numeric" value={inspKm} onChange={(e) => setInspKm(e.target.value)} />
               </Campo>
             </div>
-            <Campo label="Notas de la inspección">
-              <Textarea rows={2} value={inspNotas} onChange={(e) => setInspNotas(e.target.value)} />
-            </Campo>
 
             {reasigError && <Aviso tono="critical">{reasigError}</Aviso>}
             <div className="flex justify-end gap-2 pt-1">
               <Boton type="button" variant="ghost" disabled={guardando} onClick={() => setModalReasig(null)}>Cancelar</Boton>
               <Boton type="submit" disabled={guardando}>
                 {guardando ? 'Guardando…'
-                  : modalReasig === 'desasignar' ? 'Registrar devolución'
+                  : modalReasig === 'desasignar' ? 'Confirmar devolución'
                   : modalReasig === 'asignar' ? 'Asignar' : 'Reasignar'}
               </Boton>
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* ---------------- Actualizar galería ---------------- */}
+      <Modal abierto={modalGaleria} onClose={() => !guardando && setModalGaleria(false)} ancho="max-w-2xl" titulo="Actualizar fotos del vehículo">
+        <form onSubmit={guardarGaleria} className="space-y-4">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Las fotos nuevas reemplazan por completo la galería actual (las anteriores se borran).
+          </p>
+          <ChecklistFotos valor={fotosGaleria} onChange={setFotosGaleria} />
+          {galeriaError && <Aviso tono="critical">{galeriaError}</Aviso>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Boton type="button" variant="ghost" disabled={guardando} onClick={() => setModalGaleria(false)}>Cancelar</Boton>
+            <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar fotos'}</Boton>
+          </div>
+        </form>
       </Modal>
     </div>
   );
