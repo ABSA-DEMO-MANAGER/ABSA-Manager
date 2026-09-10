@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
+import { subirArchivo } from '../../lib/storage';
+import FotoFirmada from '../../components/FotoFirmada';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
   Boton, Card,
@@ -10,6 +12,15 @@ import {
 
 const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
+
+const PUNTOS = ['Puertas delante', 'Puertas detrás', 'Espejos', 'Interiores'];
+const PUNTOS_TODOS = [...PUNTOS, 'Otras'];
+const conductorVacio = () => ({
+  nombre: '', telefono: '', correo: '', licencia: '', licencia_vence: '',
+  puesto: '', departamento: '', jefe_directo: '', tipo_prestacion: '',
+});
+const fotosVacias = () => Object.fromEntries(PUNTOS_TODOS.map((p) => [p, []]));
+const cuentaFotos = (f) => Object.values(f).reduce((a, arr) => a + arr.length, 0);
 
 function estatusDoc(vence) {
   if (!vence) return null;
@@ -23,8 +34,6 @@ function estatusDoc(vence) {
 const FORM_VACIO = {
   codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
-  conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
-  tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -39,7 +48,7 @@ const SERV_VACIO = {
 export default function UnidadDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { esFlotaAdmin } = useFlotaPerfil();
+  const { esFlotaAdmin, flotaPerfil } = useFlotaPerfil();
 
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
@@ -49,6 +58,15 @@ export default function UnidadDetalle() {
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
+  // Asignar / reasignar / desasignar conductor con inspección de fotos
+  const [modalReasig, setModalReasig] = useState(null); // 'asignar' | 'reasignar' | 'desasignar'
+  const [conductorForm, setConductorForm] = useState(conductorVacio());
+  const [inspKm, setInspKm] = useState('');
+  const [inspNotas, setInspNotas] = useState('');
+  const [fotosDev, setFotosDev] = useState(fotosVacias());
+  const [fotosEnt, setFotosEnt] = useState(fotosVacias());
+  const [reasigError, setReasigError] = useState(null);
+
   const [modalDoc, setModalDoc] = useState(false);
   const [formDoc, setFormDoc] = useState(DOC_VACIO);
 
@@ -56,7 +74,7 @@ export default function UnidadDetalle() {
   const [formServ, setFormServ] = useState(SERV_VACIO);
 
   async function cargar() {
-    const [v, s, docs, servs, hist] = await Promise.all([
+    const [v, s, docs, servs, hist, insp] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
@@ -66,11 +84,17 @@ export default function UnidadDetalle() {
       supabase.from('flota_conductor_historial')
         .select('id, conductor_nombre, conductor_telefono, puesto, departamento, jefe_directo, tipo_prestacion, hasta')
         .eq('vehiculo_id', id).order('hasta', { ascending: false }),
+      supabase.from('flota_inspecciones')
+        .select('id, tipo, conductor_nombre, km, notas, creado_en, flota_inspeccion_fotos(id, punto, archivo_path)')
+        .eq('vehiculo_id', id).order('creado_en', { ascending: false }),
     ]);
-    const err = v.error || s.error || docs.error || servs.error || hist.error;
+    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
-    setD({ vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data, historialConductores: hist.data });
+    setD({
+      vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
+      historialConductores: hist.data, inspecciones: insp.data,
+    });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
@@ -95,11 +119,6 @@ export default function UnidadDetalle() {
       marca: v.marca ?? '', modelo: v.modelo ?? '', anio: v.anio ?? '', tipo: v.tipo ?? '',
       motor: v.motor ?? '', color: v.color ?? '', placas: v.placas ?? '', vin: v.vin ?? '',
       propiedad: v.propiedad, estado: v.estado, km: v.km ?? '', valor: v.valor ?? '',
-      conductor_nombre: v.conductor_nombre ?? '', conductor_telefono: v.conductor_telefono ?? '',
-      conductor_correo: v.conductor_correo ?? '', conductor_licencia: v.conductor_licencia ?? '',
-      licencia_vence: v.licencia_vence ?? '',
-      tipo_prestacion: v.tipo_prestacion ?? '', puesto: v.puesto ?? '',
-      jefe_directo: v.jefe_directo ?? '', departamento: v.departamento ?? '',
       proximo_servicio_km: v.proximo_servicio_km ?? '', proximo_servicio_fecha: v.proximo_servicio_fecha ?? '',
       notas: v.notas ?? '',
     });
@@ -119,13 +138,6 @@ export default function UnidadDetalle() {
       placas: form.placas.trim() || null, vin: form.vin.trim() || null,
       propiedad: form.propiedad, estado: form.estado,
       km: form.km === '' ? 0 : Number(form.km), valor: form.valor === '' ? null : Number(form.valor),
-      conductor_nombre: form.conductor_nombre.trim() || null,
-      conductor_telefono: form.conductor_telefono.trim() || null,
-      conductor_correo: form.conductor_correo.trim() || null,
-      conductor_licencia: form.conductor_licencia.trim() || null,
-      licencia_vence: form.licencia_vence || null,
-      tipo_prestacion: form.tipo_prestacion.trim() || null, puesto: form.puesto.trim() || null,
-      jefe_directo: form.jefe_directo.trim() || null, departamento: form.departamento.trim() || null,
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -133,6 +145,115 @@ export default function UnidadDetalle() {
     setGuardando(false);
     if (err) return setFormError(err.message);
     setModalEditar(false); cargar();
+  }
+
+  // ---- Asignar / reasignar / desasignar conductor con inspección ----
+  function abrirReasignar(modo) {
+    const v = d.vehiculo;
+    setModalReasig(modo);
+    setReasigError(null);
+    setInspKm(v.km ?? '');
+    setInspNotas('');
+    setFotosDev(fotosVacias());
+    setFotosEnt(fotosVacias());
+    if (modo === 'reasignar' || modo === 'asignar') {
+      setConductorForm(conductorVacio());
+    } else {
+      setConductorForm(conductorVacio()); // desasignar: no se captura conductor nuevo
+    }
+  }
+
+  async function subirFotos(inspeccionId, fotos) {
+    for (const punto of PUNTOS_TODOS) {
+      for (const file of fotos[punto]) {
+        const ruta = await subirArchivo(file, `flota/${id}/inspecciones/${inspeccionId}`);
+        await supabase.from('flota_inspeccion_fotos').insert({ inspeccion_id: inspeccionId, punto, archivo_path: ruta });
+      }
+    }
+  }
+
+  async function ejecutarReasignar(e) {
+    e.preventDefault();
+    setReasigError(null);
+    const v = d.vehiculo;
+    const hayActual = !!v.conductor_nombre;
+    const asignaNuevo = modalReasig === 'asignar' || modalReasig === 'reasignar';
+
+    if (hayActual && cuentaFotos(fotosDev) === 0) {
+      return setReasigError('Sube al menos una foto de cómo se devolvió la unidad.');
+    }
+    if (asignaNuevo && !conductorForm.nombre.trim()) {
+      return setReasigError('Escribe el nombre del nuevo conductor.');
+    }
+    if (asignaNuevo && cuentaFotos(fotosEnt) === 0) {
+      return setReasigError('Sube al menos una foto de cómo se entrega la unidad al nuevo conductor.');
+    }
+
+    setGuardando(true);
+    try {
+      const kmNum = inspKm === '' ? null : Number(inspKm);
+      const registrado_por = flotaPerfil?.perfil_id ?? null;
+
+      // 1. Inspección de devolución (si había conductor)
+      let inspDevId = null;
+      if (hayActual) {
+        const { data: inspDev, error: eDev } = await supabase.from('flota_inspecciones').insert({
+          vehiculo_id: Number(id), tipo: 'devolucion', conductor_nombre: v.conductor_nombre,
+          km: kmNum, notas: inspNotas.trim() || null, registrado_por,
+        }).select('id').single();
+        if (eDev) throw eDev;
+        inspDevId = inspDev.id;
+        await subirFotos(inspDevId, fotosDev);
+      }
+
+      // 2. Actualizar la unidad (dispara el archivado del conductor saliente)
+      const patch = asignaNuevo
+        ? {
+            conductor_nombre: conductorForm.nombre.trim(),
+            conductor_telefono: conductorForm.telefono.trim() || null,
+            conductor_correo: conductorForm.correo.trim() || null,
+            conductor_licencia: conductorForm.licencia.trim() || null,
+            licencia_vence: conductorForm.licencia_vence || null,
+            puesto: conductorForm.puesto.trim() || null,
+            departamento: conductorForm.departamento.trim() || null,
+            jefe_directo: conductorForm.jefe_directo.trim() || null,
+            tipo_prestacion: conductorForm.tipo_prestacion.trim() || null,
+          }
+        : {
+            conductor_nombre: null, conductor_telefono: null, conductor_correo: null,
+            conductor_licencia: null, licencia_vence: null,
+            puesto: null, departamento: null, jefe_directo: null, tipo_prestacion: null,
+          };
+      if (kmNum !== null) patch.km = kmNum;
+      const { error: eUpd } = await supabase.from('flota_vehiculos').update(patch).eq('id', id);
+      if (eUpd) throw eUpd;
+
+      // 3. Enlazar la devolución con el registro de historial recién creado
+      if (inspDevId) {
+        const { data: hist } = await supabase.from('flota_conductor_historial')
+          .select('id').eq('vehiculo_id', id).order('hasta', { ascending: false }).limit(1).maybeSingle();
+        if (hist?.id) {
+          await supabase.from('flota_inspecciones').update({ historial_id: hist.id }).eq('id', inspDevId);
+        }
+      }
+
+      // 4. Inspección de entrega (si se asignó un conductor nuevo)
+      if (asignaNuevo) {
+        const { data: inspEnt, error: eEnt } = await supabase.from('flota_inspecciones').insert({
+          vehiculo_id: Number(id), tipo: 'entrega', conductor_nombre: conductorForm.nombre.trim(),
+          km: kmNum, notas: inspNotas.trim() || null, registrado_por,
+        }).select('id').single();
+        if (eEnt) throw eEnt;
+        await subirFotos(inspEnt.id, fotosEnt);
+      }
+
+      setModalReasig(null);
+      cargar();
+    } catch (err) {
+      setReasigError(err.message || 'No se pudo completar la operación.');
+    } finally {
+      setGuardando(false);
+    }
   }
 
   function abrirDoc() {
@@ -261,7 +382,19 @@ export default function UnidadDetalle() {
         {v.notas && <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{v.notas}</p>}
       </Card>
 
-      <Card title="Conductor asignado">
+      <Card
+        title="Conductor asignado"
+        right={esFlotaAdmin && (
+          v.conductor_nombre ? (
+            <div className="flex gap-2">
+              <Boton variant="ghost" onClick={() => abrirReasignar('reasignar')}>Reasignar</Boton>
+              <Boton variant="danger" onClick={() => abrirReasignar('desasignar')}>Desasignar</Boton>
+            </div>
+          ) : (
+            <Boton variant="ghost" onClick={() => abrirReasignar('asignar')}>Asignar conductor</Boton>
+          )
+        )}
+      >
         {v.conductor_nombre ? (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {[
@@ -281,6 +414,45 @@ export default function UnidadDetalle() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin conductor asignado.</p>
         )}
       </Card>
+
+      {d.inspecciones?.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-base font-semibold tracking-tight">Inspecciones de entrega / devolución</h2>
+          <div className="space-y-3">
+            {d.inspecciones.map((insp) => (
+              <Card key={insp.id}>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Badge color={insp.tipo === 'entrega' ? 'var(--good)' : 'var(--serious)'}>
+                    {insp.tipo === 'entrega' ? 'Entrega' : 'Devolución'}
+                  </Badge>
+                  <span className="text-sm font-medium">{insp.conductor_nombre || '—'}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {fechaCorta(insp.creado_en?.slice(0, 10))}
+                    {insp.km != null && ` · ${Number(insp.km).toLocaleString('es-MX')} km`}
+                  </span>
+                </div>
+                {insp.notas && <p className="mb-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{insp.notas}</p>}
+                {PUNTOS_TODOS.map((punto) => {
+                  const fotos = (insp.flota_inspeccion_fotos ?? []).filter((f) => f.punto === punto);
+                  if (fotos.length === 0) return null;
+                  return (
+                    <div key={punto} className="mb-2">
+                      <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</div>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                        {fotos.map((f) => (
+                          <div key={f.id} className="aspect-square">
+                            <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {d.historialConductores.length > 0 && (
         <div>
@@ -410,28 +582,10 @@ export default function UnidadDetalle() {
               <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
             </Campo>
 
-            <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-              <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Conductor asignado</div>
-              <div className="grid grid-cols-2 gap-3">
-                <Campo label="Nombre"><Input value={form.conductor_nombre} onChange={(e) => setForm({ ...form, conductor_nombre: e.target.value })} /></Campo>
-                <Campo label="Teléfono"><Input value={form.conductor_telefono} onChange={(e) => setForm({ ...form, conductor_telefono: e.target.value })} /></Campo>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Campo label="Correo"><Input value={form.conductor_correo} onChange={(e) => setForm({ ...form, conductor_correo: e.target.value })} /></Campo>
-                <Campo label="Licencia"><Input value={form.conductor_licencia} onChange={(e) => setForm({ ...form, conductor_licencia: e.target.value })} /></Campo>
-              </div>
-              <Campo label="Vencimiento de licencia">
-                <Input type="date" value={form.licencia_vence} onChange={(e) => setForm({ ...form, licencia_vence: e.target.value })} />
-              </Campo>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Campo label="Puesto"><Input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} /></Campo>
-                <Campo label="Departamento"><Input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} /></Campo>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <Campo label="Jefe directo"><Input value={form.jefe_directo} onChange={(e) => setForm({ ...form, jefe_directo: e.target.value })} /></Campo>
-                <Campo label="Tipo de prestación"><Input value={form.tipo_prestacion} onChange={(e) => setForm({ ...form, tipo_prestacion: e.target.value })} /></Campo>
-              </div>
-            </div>
+            <p className="rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              El conductor y sus datos se cambian con <strong>Asignar / Reasignar / Desasignar</strong> en la tarjeta
+              "Conductor asignado", donde se registra la inspección de fotos.
+            </p>
 
             <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
               <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio</div>
@@ -536,6 +690,135 @@ export default function UnidadDetalle() {
           </div>
         </form>
       </Modal>
+
+      {/* ---------------- Asignar / reasignar / desasignar conductor ---------------- */}
+      <Modal
+        abierto={!!modalReasig}
+        onClose={() => !guardando && setModalReasig(null)}
+        ancho="max-w-2xl"
+        titulo={modalReasig === 'asignar' ? 'Asignar conductor'
+          : modalReasig === 'desasignar' ? 'Desasignar conductor' : 'Reasignar conductor'}
+      >
+        {modalReasig && (
+          <form onSubmit={ejecutarReasignar} className="space-y-4">
+            {v.conductor_nombre && (
+              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--serious)' }}>
+                  Inspección de devolución — {v.conductor_nombre}
+                </div>
+                <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Obligatorio: sube fotos de cómo se devuelve la unidad. Se comparan contra las de entrega.
+                </p>
+                <ChecklistFotos valor={fotosDev} onChange={setFotosDev} />
+              </div>
+            )}
+
+            {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
+              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Nuevo conductor</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Campo label="Nombre" required>
+                    <Input value={conductorForm.nombre} required onChange={(e) => setConductorForm({ ...conductorForm, nombre: e.target.value })} />
+                  </Campo>
+                  <Campo label="Teléfono">
+                    <Input value={conductorForm.telefono} onChange={(e) => setConductorForm({ ...conductorForm, telefono: e.target.value })} />
+                  </Campo>
+                  <Campo label="Correo">
+                    <Input value={conductorForm.correo} onChange={(e) => setConductorForm({ ...conductorForm, correo: e.target.value })} />
+                  </Campo>
+                  <Campo label="Licencia">
+                    <Input value={conductorForm.licencia} onChange={(e) => setConductorForm({ ...conductorForm, licencia: e.target.value })} />
+                  </Campo>
+                  <Campo label="Vence licencia">
+                    <Input type="date" value={conductorForm.licencia_vence} onChange={(e) => setConductorForm({ ...conductorForm, licencia_vence: e.target.value })} />
+                  </Campo>
+                  <Campo label="Puesto">
+                    <Input value={conductorForm.puesto} onChange={(e) => setConductorForm({ ...conductorForm, puesto: e.target.value })} />
+                  </Campo>
+                  <Campo label="Departamento">
+                    <Input value={conductorForm.departamento} onChange={(e) => setConductorForm({ ...conductorForm, departamento: e.target.value })} />
+                  </Campo>
+                  <Campo label="Jefe directo">
+                    <Input value={conductorForm.jefe_directo} onChange={(e) => setConductorForm({ ...conductorForm, jefe_directo: e.target.value })} />
+                  </Campo>
+                  <Campo label="Tipo de prestación">
+                    <Input value={conductorForm.tipo_prestacion} onChange={(e) => setConductorForm({ ...conductorForm, tipo_prestacion: e.target.value })} />
+                  </Campo>
+                </div>
+              </div>
+            )}
+
+            {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
+              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>Inspección de entrega</div>
+                <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Obligatorio: sube fotos de cómo se entrega la unidad al nuevo conductor.
+                </p>
+                <ChecklistFotos valor={fotosEnt} onChange={setFotosEnt} />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Campo label="Kilometraje actual">
+                <Input inputMode="numeric" value={inspKm} onChange={(e) => setInspKm(e.target.value)} />
+              </Campo>
+            </div>
+            <Campo label="Notas de la inspección">
+              <Textarea rows={2} value={inspNotas} onChange={(e) => setInspNotas(e.target.value)} />
+            </Campo>
+
+            {reasigError && <Aviso tono="critical">{reasigError}</Aviso>}
+            <div className="flex justify-end gap-2 pt-1">
+              <Boton type="button" variant="ghost" disabled={guardando} onClick={() => setModalReasig(null)}>Cancelar</Boton>
+              <Boton type="submit" disabled={guardando}>
+                {guardando ? 'Guardando…'
+                  : modalReasig === 'desasignar' ? 'Registrar devolución'
+                  : modalReasig === 'asignar' ? 'Asignar' : 'Reasignar'}
+              </Boton>
+            </div>
+          </form>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function ChecklistFotos({ valor, onChange }) {
+  function agregar(punto, fileList) {
+    const nuevos = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    if (!nuevos.length) return;
+    onChange({ ...valor, [punto]: [...valor[punto], ...nuevos] });
+  }
+  function quitar(punto, i) {
+    onChange({ ...valor, [punto]: valor[punto].filter((_, idx) => idx !== i) });
+  }
+  return (
+    <div className="space-y-3">
+      {PUNTOS_TODOS.map((punto) => (
+        <div key={punto}>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</span>
+            <label className="cursor-pointer text-xs underline" style={{ color: 'var(--series-1)' }}>
+              + Fotos
+              <input type="file" accept="image/*" capture="environment" multiple className="hidden"
+                     onChange={(e) => { agregar(punto, e.target.files); e.target.value = ''; }} />
+            </label>
+          </div>
+          {valor[punto].length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {valor[punto].map((file, i) => (
+                <div key={i} className="relative">
+                  <img src={URL.createObjectURL(file)} alt="" className="h-14 w-14 rounded-lg border object-cover"
+                       style={{ borderColor: 'var(--border)' }} />
+                  <button type="button" onClick={() => quitar(punto, i)}
+                          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] text-white"
+                          style={{ background: 'var(--critical)' }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
