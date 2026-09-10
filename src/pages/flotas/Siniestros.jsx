@@ -189,7 +189,7 @@ export default function Siniestros() {
               </div>
             )}
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Tipo">
               <Select value={form.tipo} onChange={(e) => cambiarTipo(e.target.value)}>
                 <option>Siniestro</option>
@@ -239,7 +239,7 @@ export default function Siniestros() {
               {detalle.gravedad && <Badge color={COLOR_GRAV[detalle.gravedad]}>{detalle.gravedad}</Badge>}
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{fechaCorta(detalle.fecha)}</span>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <Info label="Unidad" valor={nombreVeh(vehById[detalle.vehiculo_id])} />
               <Info label="Clasificación" valor={detalle.clasificacion} />
               <Info label="Ubicación" valor={detalle.ubicacion} />
@@ -258,7 +258,7 @@ export default function Siniestros() {
             {esFlotaAdmin && (
               <div className="space-y-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="text-xs font-medium" style={{ color: 'var(--series-1)' }}>Gestión</div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Campo label="Aseguradora">
                     <Input value={gestion.aseguradora} onChange={(e) => setGestion({ ...gestion, aseguradora: e.target.value })} />
                   </Campo>

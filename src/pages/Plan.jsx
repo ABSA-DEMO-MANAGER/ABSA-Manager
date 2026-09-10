@@ -469,7 +469,7 @@ export default function Plan() {
             <Textarea rows={2} value={form.descripcion}
                       onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Sucursal" required>
               <Select value={form.sucursal_id} required
                       onChange={(e) => setForm({ ...form, sucursal_id: e.target.value, activo_id: '' })}>
@@ -487,7 +487,7 @@ export default function Plan() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Campo label="Tipo">
               <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
                 {TIPOS_ORDEN.map((t) => <option key={t} value={t}>{TIPOS[t].label}</option>)}
@@ -505,7 +505,7 @@ export default function Plan() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Fecha programada">
               <Input type="date" value={form.fecha_programada}
                      onChange={(e) => setForm({ ...form, fecha_programada: e.target.value })} />
@@ -517,7 +517,7 @@ export default function Plan() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Costo estimado">
               <Input inputMode="decimal" value={form.costo_estimado} placeholder="0.00"
                      onChange={(e) => setForm({ ...form, costo_estimado: e.target.value })} />
@@ -554,7 +554,7 @@ export default function Plan() {
               Al finalizar se crea el registro de gasto ligado a esta orden y ya no podrá
               capturarse por separado en el módulo de Gastos.
             </Aviso>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Fecha de realización" required>
                 <Input type="date" value={formFinal.fecha_realizada} required
                        onChange={(e) => setFormFinal({ ...formFinal, fecha_realizada: e.target.value })} />
@@ -569,7 +569,7 @@ export default function Plan() {
                                  onChange={(v) => setFormFinal({ ...formFinal, proveedor_id: v })}
                                  onCreado={agregarProveedor} />
             </Campo>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Se pagó con" required>
                 <Select value={formFinal.unidad_pago}
                         onChange={(e) => setFormFinal({ ...formFinal, unidad_pago: e.target.value })}>
@@ -583,7 +583,7 @@ export default function Plan() {
                        onChange={(e) => setFormFinal({ ...formFinal, monto: e.target.value })} />
               </Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Estatus de pago">
                 <Select value={formFinal.estatus_pago}
                         onChange={(e) => setFormFinal({ ...formFinal, estatus_pago: e.target.value })}>

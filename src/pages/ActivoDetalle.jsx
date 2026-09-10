@@ -411,7 +411,7 @@ export default function ActivoDetalle() {
             <Textarea rows={2} value={formMant.descripcion}
                       onChange={(e) => setFormMant({ ...formMant, descripcion: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Criticidad">
               <Select value={formMant.criticidad} onChange={(e) => setFormMant({ ...formMant, criticidad: e.target.value })}>
                 {Object.entries(CRITICIDAD).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -422,7 +422,7 @@ export default function ActivoDetalle() {
                      onChange={(e) => setFormMant({ ...formMant, fecha_programada: e.target.value })} />
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Costo estimado">
               <Input inputMode="decimal" value={formMant.costo_estimado} placeholder="0.00"
                      onChange={(e) => setFormMant({ ...formMant, costo_estimado: e.target.value })} />
@@ -458,7 +458,7 @@ export default function ActivoDetalle() {
             <Campo label="Foto" hint={activo.foto_path ? 'Sube una nueva para reemplazarla' : undefined}>
               <ArchivoInput accept="image/*" onChange={(f) => setFormEditar({ ...formEditar, foto: f })} />
             </Campo>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Nombre" required>
                 <Input value={formEditar.nombre} required
                        onChange={(e) => setFormEditar({ ...formEditar, nombre: e.target.value })} />
@@ -468,7 +468,7 @@ export default function ActivoDetalle() {
                        onChange={(e) => setFormEditar({ ...formEditar, codigo: e.target.value })} />
               </Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Ubicación">
                 <Input value={formEditar.ubicacion}
                        onChange={(e) => setFormEditar({ ...formEditar, ubicacion: e.target.value })} />
@@ -481,7 +481,7 @@ export default function ActivoDetalle() {
                 </Select>
               </Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Marca">
                 <Input value={formEditar.marca}
                        onChange={(e) => setFormEditar({ ...formEditar, marca: e.target.value })} />
@@ -491,7 +491,7 @@ export default function ActivoDetalle() {
                        onChange={(e) => setFormEditar({ ...formEditar, modelo: e.target.value })} />
               </Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Número de serie">
                 <Input value={formEditar.serie}
                        onChange={(e) => setFormEditar({ ...formEditar, serie: e.target.value })} />

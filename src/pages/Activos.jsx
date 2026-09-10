@@ -184,7 +184,7 @@ export default function Activos() {
           <div className="mb-4 space-y-3">
             <div className="flex flex-wrap gap-2">
               <Input placeholder="Buscar equipo, marca, modelo, serie…" value={busca}
-                     onChange={(e) => setBusca(e.target.value)} className="!w-auto min-w-[200px] flex-1" />
+                     onChange={(e) => setBusca(e.target.value)} className="w-full min-w-[200px] sm:!w-auto sm:flex-1" />
               <Select value={fSuc} onChange={(e) => setFSuc(e.target.value)} className="!w-auto">
                 <option value="">Todas las sucursales</option>
                 {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -254,7 +254,7 @@ export default function Activos() {
       <Modal abierto={modal} onClose={() => setModal(false)}
              titulo={esAdmin ? 'Nuevo activo' : 'Proponer alta de activo'}>
         <form onSubmit={guardar} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Sucursal" required>
               <Select value={form.sucursal_id} required
                       onChange={(e) => setForm({ ...form, sucursal_id: e.target.value })}>
@@ -270,7 +270,7 @@ export default function Activos() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Nombre" required>
               <Input value={form.nombre} required onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             </Campo>
@@ -281,7 +281,7 @@ export default function Activos() {
           <Campo label="Ubicación">
             <Input value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Marca">
               <Input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} />
             </Campo>
@@ -289,7 +289,7 @@ export default function Activos() {
               <Input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} />
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Número de serie">
               <Input value={form.serie} onChange={(e) => setForm({ ...form, serie: e.target.value })} />
             </Campo>

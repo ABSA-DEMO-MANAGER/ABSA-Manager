@@ -154,7 +154,7 @@ export default function Proveedores() {
         <Card>
           <div className="mb-4 space-y-3">
             <Input placeholder="Buscar proveedor, servicio, contacto o ciudad…" value={busca}
-                   onChange={(e) => setBusca(e.target.value)} className="!w-auto min-w-[240px]" />
+                   onChange={(e) => setBusca(e.target.value)} className="w-full sm:!w-auto sm:min-w-[240px]" />
             <FiltroChips opciones={opcionesCobertura} valor={fCobertura} onChange={setFCobertura} todasLabel="Todas las coberturas" />
           </div>
           <Tabla
@@ -211,7 +211,7 @@ export default function Proveedores() {
           <Campo label="Servicio" hint="Ej. Refrigeración, Eléctrico, Plomería">
             <Input value={form.servicio} onChange={(e) => setForm({ ...form, servicio: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Ciudad">
               <Input value={form.ciudad} onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
             </Campo>
@@ -222,7 +222,7 @@ export default function Proveedores() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Contacto">
               <Input value={form.contacto} onChange={(e) => setForm({ ...form, contacto: e.target.value })} />
             </Campo>

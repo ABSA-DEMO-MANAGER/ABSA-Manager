@@ -202,7 +202,7 @@ export default function Gastos() {
       <Card>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input placeholder="Buscar concepto o proveedor…" value={busca}
-                 onChange={(e) => setBusca(e.target.value)} className="!w-auto min-w-[200px] flex-1" />
+                 onChange={(e) => setBusca(e.target.value)} className="w-full min-w-[200px] sm:!w-auto sm:flex-1" />
           <Select value={fSucursal} onChange={(e) => setFSucursal(e.target.value)} className="!w-auto">
             <option value="">Todas las sucursales</option>
             {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -228,7 +228,7 @@ export default function Gastos() {
       {/* ---------------- Alta ---------------- */}
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Registrar gasto">
         <form onSubmit={guardar} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Fecha" required>
               <Input type="date" value={form.fecha} required
                      onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
@@ -255,7 +255,7 @@ export default function Gastos() {
                       onChange={(e) => setForm({ ...form, concepto: e.target.value })} />
           </Campo>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Tipo" required hint="Preventivo/correctivo se registran desde el Plan de mantenimiento">
               <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
                 {TIPOS_CAPTURA_DIRECTA.map((k) => <option key={k} value={k}>{TIPOS[k].label}</option>)}
@@ -268,7 +268,7 @@ export default function Gastos() {
             </Campo>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Unidad de pago">
               <Select value={form.unidad_pago}
                       onChange={(e) => setForm({ ...form, unidad_pago: e.target.value })}>
@@ -283,7 +283,7 @@ export default function Gastos() {
             </Campo>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Cotizaciones" hint="Cuántas se pidieron">
               <Input type="number" min="0" value={form.cotizaciones}
                      onChange={(e) => setForm({ ...form, cotizaciones: e.target.value })} />

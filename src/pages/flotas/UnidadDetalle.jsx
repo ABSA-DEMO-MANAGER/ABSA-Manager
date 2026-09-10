@@ -526,7 +526,7 @@ export default function UnidadDetalle() {
       <Modal abierto={modalEditar} onClose={() => setModalEditar(false)} titulo="Editar unidad" ancho="max-w-2xl">
         {form && (
           <form onSubmit={guardarEdicion} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Código / No. económico">
                 <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
               </Campo>
@@ -537,21 +537,21 @@ export default function UnidadDetalle() {
                 </Select>
               </Campo>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Campo label="Marca"><Input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} /></Campo>
               <Campo label="Modelo"><Input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} /></Campo>
               <Campo label="Año"><Input inputMode="numeric" value={form.anio} onChange={(e) => setForm({ ...form, anio: e.target.value })} /></Campo>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Campo label="Tipo"><Input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} /></Campo>
               <Campo label="Motor"><Input value={form.motor} onChange={(e) => setForm({ ...form, motor: e.target.value })} /></Campo>
               <Campo label="Color"><Input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} /></Campo>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Placas"><Input value={form.placas} onChange={(e) => setForm({ ...form, placas: e.target.value })} /></Campo>
               <Campo label="VIN"><Input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} /></Campo>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Campo label="Propiedad">
                 <Select value={form.propiedad} onChange={(e) => setForm({ ...form, propiedad: e.target.value })}>
                   <option value="propio">Propio</option>
@@ -576,7 +576,7 @@ export default function UnidadDetalle() {
 
             <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
               <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio</div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Campo label="Kilometraje"><Input inputMode="numeric" value={form.proximo_servicio_km} onChange={(e) => setForm({ ...form, proximo_servicio_km: e.target.value })} /></Campo>
                 <Campo label="Fecha"><Input type="date" value={form.proximo_servicio_fecha} onChange={(e) => setForm({ ...form, proximo_servicio_fecha: e.target.value })} /></Campo>
               </div>
@@ -604,7 +604,7 @@ export default function UnidadDetalle() {
           <Campo label="Referencia / folio">
             <Input value={formDoc.referencia} onChange={(e) => setFormDoc({ ...formDoc, referencia: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Emisión">
               <Input type="date" value={formDoc.emision} onChange={(e) => setFormDoc({ ...formDoc, emision: e.target.value })} />
             </Campo>
@@ -626,7 +626,7 @@ export default function UnidadDetalle() {
       {/* ---------------- Registrar servicio ---------------- */}
       <Modal abierto={modalServ} onClose={() => setModalServ(false)} titulo="Registrar servicio">
         <form onSubmit={guardarServicio} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Fecha" required>
               <Input type="date" value={formServ.fecha} required onChange={(e) => setFormServ({ ...formServ, fecha: e.target.value })} />
             </Campo>
@@ -640,7 +640,7 @@ export default function UnidadDetalle() {
           <Campo label="Concepto" required hint="Ej. Servicio 80,000 km">
             <Input value={formServ.concepto} required onChange={(e) => setFormServ({ ...formServ, concepto: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Taller">
               <Input value={formServ.taller} onChange={(e) => setFormServ({ ...formServ, taller: e.target.value })} />
             </Campo>
@@ -648,7 +648,7 @@ export default function UnidadDetalle() {
               <Input inputMode="numeric" value={formServ.km} onChange={(e) => setFormServ({ ...formServ, km: e.target.value })} />
             </Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Mano de obra">
               <Input inputMode="decimal" value={formServ.mano_obra} placeholder="0.00" onChange={(e) => setFormServ({ ...formServ, mano_obra: e.target.value })} />
             </Campo>
@@ -661,7 +661,7 @@ export default function UnidadDetalle() {
           </Campo>
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio (opcional)</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Kilometraje">
                 <Input inputMode="numeric" value={formServ.proximo_servicio_km} onChange={(e) => setFormServ({ ...formServ, proximo_servicio_km: e.target.value })} />
               </Campo>
@@ -725,7 +725,7 @@ export default function UnidadDetalle() {
             {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Nuevo conductor</div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Campo label="Nombre" required>
                     <Input value={conductorForm.nombre} required onChange={(e) => setConductorForm({ ...conductorForm, nombre: e.target.value })} />
                   </Campo>
@@ -757,7 +757,7 @@ export default function UnidadDetalle() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Kilometraje actual">
                 <Input inputMode="numeric" value={inspKm} onChange={(e) => setInspKm(e.target.value)} />
               </Campo>

@@ -329,7 +329,7 @@ export default function Combustible() {
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               Carga fija semanal de gasolina para <strong>{nombreVeh(cajonModal)}</strong>. Es el costo base; las cargas extra van aparte.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Pesos por semana">
                 <Input type="number" min="0" step="0.01" value={cajonForm.cajon_pesos} onChange={(e) => setCajonForm({ ...cajonForm, cajon_pesos: e.target.value })} />
               </Campo>
@@ -350,7 +350,7 @@ export default function Combustible() {
         {extraModal && (
           <form onSubmit={guardarExtra} className="space-y-3">
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Unidad: <strong>{nombreVeh(extraModal)}</strong></p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Litros">
                 <Input type="number" min="0" step="0.1" value={extraForm.litros} onChange={(e) => setExtraForm({ ...extraForm, litros: e.target.value })} />
               </Campo>
@@ -381,7 +381,7 @@ export default function Combustible() {
         {tagModal && (
           <form onSubmit={guardarTag} className="space-y-3">
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Unidad: <strong>{nombreVeh(tagModal)}</strong>. Registra cuánto consumió en tags / casetas.</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Monto (MXN)" required>
                 <Input type="number" min="0" step="0.01" value={tagForm.monto} required onChange={(e) => setTagForm({ ...tagForm, monto: e.target.value })} />
               </Campo>

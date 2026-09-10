@@ -145,7 +145,7 @@ export default function Unidades() {
       <Card>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input placeholder="Buscar por código, marca, placas, conductor…" value={busca}
-                 onChange={(e) => setBusca(e.target.value)} className="!w-auto min-w-[220px] flex-1" />
+                 onChange={(e) => setBusca(e.target.value)} className="w-full min-w-[200px] sm:!w-auto sm:flex-1" />
           <Select value={fCiudad} onChange={(e) => setFCiudad(e.target.value)} className="!w-auto">
             <option value="">Todas las ciudades</option>
             {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -179,7 +179,7 @@ export default function Unidades() {
 
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Nueva unidad" ancho="max-w-2xl">
         <form onSubmit={guardar} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Código / No. económico">
               <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
             </Campo>
@@ -190,21 +190,21 @@ export default function Unidades() {
               </Select>
             </Campo>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Campo label="Marca"><Input value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} /></Campo>
             <Campo label="Modelo"><Input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} /></Campo>
             <Campo label="Año"><Input inputMode="numeric" value={form.anio} onChange={(e) => setForm({ ...form, anio: e.target.value })} /></Campo>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Campo label="Tipo" hint="Pickup, Sedán, Van…"><Input value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })} /></Campo>
             <Campo label="Motor"><Input value={form.motor} onChange={(e) => setForm({ ...form, motor: e.target.value })} /></Campo>
             <Campo label="Color"><Input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} /></Campo>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Placas"><Input value={form.placas} onChange={(e) => setForm({ ...form, placas: e.target.value })} /></Campo>
             <Campo label="VIN"><Input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} /></Campo>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Campo label="Propiedad">
               <Select value={form.propiedad} onChange={(e) => setForm({ ...form, propiedad: e.target.value })}>
                 <option value="propio">Propio</option>
@@ -224,22 +224,22 @@ export default function Unidades() {
 
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Conductor asignado</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Nombre"><Input value={form.conductor_nombre} onChange={(e) => setForm({ ...form, conductor_nombre: e.target.value })} /></Campo>
               <Campo label="Teléfono"><Input value={form.conductor_telefono} onChange={(e) => setForm({ ...form, conductor_telefono: e.target.value })} /></Campo>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Correo"><Input value={form.conductor_correo} onChange={(e) => setForm({ ...form, conductor_correo: e.target.value })} /></Campo>
               <Campo label="Licencia"><Input value={form.conductor_licencia} onChange={(e) => setForm({ ...form, conductor_licencia: e.target.value })} /></Campo>
             </div>
             <Campo label="Vencimiento de licencia" hint="Opcional">
               <Input type="date" value={form.licencia_vence} onChange={(e) => setForm({ ...form, licencia_vence: e.target.value })} />
             </Campo>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Puesto"><Input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} /></Campo>
               <Campo label="Departamento"><Input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} /></Campo>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Jefe directo"><Input value={form.jefe_directo} onChange={(e) => setForm({ ...form, jefe_directo: e.target.value })} /></Campo>
               <Campo label="Tipo de prestación"><Input value={form.tipo_prestacion} onChange={(e) => setForm({ ...form, tipo_prestacion: e.target.value })} /></Campo>
             </div>
@@ -247,7 +247,7 @@ export default function Unidades() {
 
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Kilometraje"><Input inputMode="numeric" value={form.proximo_servicio_km} onChange={(e) => setForm({ ...form, proximo_servicio_km: e.target.value })} /></Campo>
               <Campo label="Fecha"><Input type="date" value={form.proximo_servicio_fecha} onChange={(e) => setForm({ ...form, proximo_servicio_fecha: e.target.value })} /></Campo>
             </div>

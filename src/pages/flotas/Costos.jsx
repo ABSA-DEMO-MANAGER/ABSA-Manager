@@ -260,7 +260,7 @@ export default function Costos() {
               </div>
             )}
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Categoría">
               <Select value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
                 {GASTO_CATS.map((c) => <option key={c} value={c}>{c}</option>)}

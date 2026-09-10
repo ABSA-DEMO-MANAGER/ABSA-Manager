@@ -57,7 +57,7 @@ export default function SelectorProveedor({ proveedores, value, onChange, onCrea
           <Campo label="Servicio" hint="Ej. Refrigeración, Eléctrico, Plomería">
             <Input value={form.servicio} onChange={(e) => setForm({ ...form, servicio: e.target.value })} />
           </Campo>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Ciudad">
               <Input value={form.ciudad} onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
             </Campo>
