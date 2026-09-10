@@ -21,7 +21,7 @@ function estatusDoc(vence) {
 }
 
 const FORM_VACIO = {
-  codigo: '', sucursal_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
+  codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
   conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
   tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
@@ -58,7 +58,7 @@ export default function UnidadDetalle() {
   async function cargar() {
     const [v, s, docs, servs, hist] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
-      supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
+      supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
       supabase.from('flota_servicios')
         .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones')
@@ -70,11 +70,11 @@ export default function UnidadDetalle() {
     const err = v.error || s.error || docs.error || servs.error || hist.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
-    setD({ vehiculo: v.data, sucursales: s.data, documentos: docs.data, servicios: servs.data, historialConductores: hist.data });
+    setD({ vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data, historialConductores: hist.data });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
-  const sucById = useMemo(() => Object.fromEntries((d?.sucursales ?? []).map((s) => [s.id, s])), [d]);
+  const ciudadById = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.id, c])), [d]);
 
   const alertas = useMemo(() => {
     if (!d) return [];
@@ -91,7 +91,7 @@ export default function UnidadDetalle() {
   function abrirEditar() {
     const v = d.vehiculo;
     setForm({
-      codigo: v.codigo ?? '', sucursal_id: v.sucursal_id ? String(v.sucursal_id) : '',
+      codigo: v.codigo ?? '', ciudad_id: v.ciudad_id ? String(v.ciudad_id) : '',
       marca: v.marca ?? '', modelo: v.modelo ?? '', anio: v.anio ?? '', tipo: v.tipo ?? '',
       motor: v.motor ?? '', color: v.color ?? '', placas: v.placas ?? '', vin: v.vin ?? '',
       propiedad: v.propiedad, estado: v.estado, km: v.km ?? '', valor: v.valor ?? '',
@@ -112,7 +112,7 @@ export default function UnidadDetalle() {
     setGuardando(true);
     const { error: err } = await supabase.from('flota_vehiculos').update({
       codigo: form.codigo.trim() || null,
-      sucursal_id: form.sucursal_id ? Number(form.sucursal_id) : null,
+      ciudad_id: form.ciudad_id ? Number(form.ciudad_id) : null,
       marca: form.marca.trim() || null, modelo: form.modelo.trim() || null,
       anio: form.anio ? Number(form.anio) : null, tipo: form.tipo.trim() || null,
       motor: form.motor.trim() || null, color: form.color.trim() || null,
@@ -226,7 +226,7 @@ export default function UnidadDetalle() {
             <Badge color={COLOR_ESTADO[v.estado]}>{ESTADOS[v.estado]}</Badge>
           </h1>
           <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {[v.codigo, v.placas, sucById[v.sucursal_id]?.nombre].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+            {[v.codigo, v.placas, ciudadById[v.ciudad_id]?.nombre].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
           </p>
         </div>
         {esFlotaAdmin && <Boton variant="ghost" onClick={abrirEditar}>Editar unidad</Boton>}
@@ -371,10 +371,10 @@ export default function UnidadDetalle() {
               <Campo label="Código / No. económico">
                 <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
               </Campo>
-              <Campo label="Sucursal">
-                <Select value={form.sucursal_id} onChange={(e) => setForm({ ...form, sucursal_id: e.target.value })}>
+              <Campo label="Ciudad">
+                <Select value={form.ciudad_id} onChange={(e) => setForm({ ...form, ciudad_id: e.target.value })}>
                   <option value="">Sin asignar</option>
-                  {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </Select>
               </Campo>
             </div>

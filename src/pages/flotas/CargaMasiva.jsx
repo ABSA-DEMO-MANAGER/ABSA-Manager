@@ -4,7 +4,7 @@ import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { Card, Tabla, Boton, Aviso, Badge, Cargando } from '../../components/ui';
 
 const COLUMNAS = [
-  'codigo', 'sucursal', 'marca', 'modelo', 'anio', 'tipo', 'motor', 'color', 'placas', 'vin',
+  'codigo', 'ciudad', 'marca', 'modelo', 'anio', 'tipo', 'motor', 'color', 'placas', 'vin',
   'propiedad', 'estado', 'km', 'valor',
   'conductor_nombre', 'conductor_telefono', 'conductor_correo', 'conductor_licencia', 'licencia_vence',
   'tipo_prestacion', 'puesto', 'jefe_directo', 'departamento',
@@ -14,7 +14,7 @@ const COLUMNAS = [
 ];
 
 const FILA_EJEMPLO = [
-  'ECO-1001', 'GDL', 'Nissan', 'NP300', '2023', 'Pickup', '2.5L 4 cil.', 'Blanco', 'JAB-12-34', '3N6AD33C4MK000000',
+  'ECO-1001', 'Guadalajara', 'Nissan', 'NP300', '2023', 'Pickup', '2.5L 4 cil.', 'Blanco', 'JAB-12-34', '3N6AD33C4MK000000',
   'arrendado', 'activo', '42000', '520000',
   'Nombre Apellido', '+52 33 1234 5678', 'correo@grupoabsa.com', 'B-1234567', '2027-05-14',
   'Nómina', 'Repartidor', 'Juan Pérez', 'Logística',
@@ -52,7 +52,7 @@ function descargarPlantilla() {
 
 export default function CargaMasiva() {
   const { esFlotaAdmin } = useFlotaPerfil();
-  const [sucursales, setSucursales] = useState(null);
+  const [ciudades, setCiudades] = useState(null);
   const [codigosExistentes, setCodigosExistentes] = useState(new Set());
   const [error, setError] = useState(null);
 
@@ -62,17 +62,17 @@ export default function CargaMasiva() {
 
   useEffect(() => {
     (async () => {
-      const [s, v] = await Promise.all([
-        supabase.from('sucursales').select('id, codigo').order('codigo'),
+      const [c, v] = await Promise.all([
+        supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
         supabase.from('flota_vehiculos').select('codigo'),
       ]);
-      if (s.error || v.error) { setError((s.error || v.error).message); return; }
-      setSucursales(s.data);
+      if (c.error || v.error) { setError((c.error || v.error).message); return; }
+      setCiudades(c.data);
       setCodigosExistentes(new Set(v.data.map((x) => (x.codigo || '').toUpperCase()).filter(Boolean)));
     })();
   }, []);
 
-  const sucPorCodigo = useMemo(() => Object.fromEntries((sucursales ?? []).map((s) => [s.codigo.toUpperCase(), s.id])), [sucursales]);
+  const ciudadPorNombre = useMemo(() => Object.fromEntries((ciudades ?? []).map((c) => [c.nombre.trim().toLowerCase(), c.id])), [ciudades]);
 
   function num(v) { const n = parseFloat(String(v ?? '').replace(/[$,\s]/g, '')); return isNaN(n) ? null : n; }
   function txt(v) { return String(v ?? '').trim() || null; }
@@ -89,12 +89,12 @@ export default function CargaMasiva() {
         const o = {};
         encabezado.forEach((col, i) => { o[col] = fila[i]; });
         const codigo = txt(o.codigo);
-        const sucCodigo = txt(o.sucursal)?.toUpperCase();
+        const ciudadTexto = txt(o.ciudad);
         return {
           _codigoDuplicado: codigo && codigosExistentes.has(codigo.toUpperCase()),
-          _sucursalId: sucCodigo ? sucPorCodigo[sucCodigo] ?? null : null,
-          _sucursalTexto: sucCodigo,
-          codigo, sucursal: o.sucursal,
+          _ciudadId: ciudadTexto ? ciudadPorNombre[ciudadTexto.toLowerCase()] ?? null : null,
+          _ciudadTexto: ciudadTexto,
+          codigo, ciudad: o.ciudad,
           marca: txt(o.marca), modelo: txt(o.modelo), anio: num(o.anio), tipo: txt(o.tipo),
           motor: txt(o.motor), color: txt(o.color), placas: txt(o.placas), vin: txt(o.vin),
           propiedad: /arrend/i.test(o.propiedad || '') ? 'arrendado' : 'propio',
@@ -122,7 +122,7 @@ export default function CargaMasiva() {
     for (const f of filas) {
       if (f._codigoDuplicado) { omitidas++; continue; }
       const { data: nuevo, error: err } = await supabase.from('flota_vehiculos').insert({
-        codigo: f.codigo, sucursal_id: f._sucursalId, marca: f.marca, modelo: f.modelo, anio: f.anio,
+        codigo: f.codigo, ciudad_id: f._ciudadId, marca: f.marca, modelo: f.modelo, anio: f.anio,
         tipo: f.tipo, motor: f.motor, color: f.color, placas: f.placas, vin: f.vin,
         propiedad: f.propiedad, estado: f.estado, km: f.km, valor: f.valor,
         conductor_nombre: f.conductor_nombre, conductor_telefono: f.conductor_telefono,
@@ -154,7 +154,7 @@ export default function CargaMasiva() {
 
   if (!esFlotaAdmin) return <Aviso tono="critical">Solo un administrador de Flotas puede hacer carga masiva.</Aviso>;
   if (error) return <Aviso tono="critical">No se pudo preparar la carga masiva: {error}</Aviso>;
-  if (!sucursales) return <Cargando />;
+  if (!ciudades) return <Cargando />;
 
   return (
     <div className="space-y-5">
@@ -167,8 +167,8 @@ export default function CargaMasiva() {
 
       <Card title="1. Descarga la plantilla" subtitle="Llénala en Excel o Google Sheets y guárdala como CSV.">
         <ul className="mb-4 list-disc space-y-1 pl-5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          <li>La columna <strong>sucursal</strong> debe usar el código de tu sucursal (GDL, HMO, CUU…) tal como aparece en Mantenimiento.</li>
-          <li>Fechas en formato <strong>AAAA-MM-DD</strong> (ej. 2026-11-30). Deja vacío lo que no apliqué.</li>
+          <li>La columna <strong>ciudad</strong> debe escribirse tal como aparece en Flotas (Guadalajara, Hermosillo, Culiacán…). Si no coincide, la unidad se crea sin ciudad.</li>
+          <li>Fechas en formato <strong>AAAA-MM-DD</strong> (ej. 2026-11-30). Deja vacío lo que no aplique.</li>
           <li><strong>propiedad</strong>: "propio" o "arrendado". <strong>estado</strong>: "activo", "en_mantenimiento" o "inactivo".</li>
           <li>Si el <strong>código</strong> ya existe en el sistema, esa fila se omite al importar (no se duplica).</li>
         </ul>
@@ -192,9 +192,9 @@ export default function CargaMasiva() {
       {filas && (
         <Card title={`3. Revisa antes de importar (${filas.length} filas)`}
               right={<Boton onClick={importar} disabled={importando}>{importando ? 'Importando…' : `Importar ${filas.filter((f) => !f._codigoDuplicado).length} unidades`}</Boton>}>
-          {filas.some((f) => f._sucursalTexto && !f._sucursalId) && (
+          {filas.some((f) => f._ciudadTexto && !f._ciudadId) && (
             <Aviso tono="warning">
-              Algunas filas tienen un código de sucursal que no reconozco — esas unidades se crearán sin sucursal asignada.
+              Algunas filas tienen una ciudad que no reconozco — esas unidades se crearán sin ciudad asignada.
             </Aviso>
           )}
           <div className="mt-3">
@@ -202,8 +202,8 @@ export default function CargaMasiva() {
               columnas={[
                 { key: 'codigo', header: 'Código', nowrap: true, render: (f) => f.codigo ?? '—' },
                 { key: 'unidad', header: 'Unidad', render: (f) => [f.marca, f.modelo, f.anio].filter(Boolean).join(' ') || '—' },
-                { key: 'sucursal', header: 'Sucursal', nowrap: true, render: (f) =>
-                    f._sucursalTexto ? (f._sucursalId ? f._sucursalTexto : <span style={{ color: 'var(--critical)' }}>{f._sucursalTexto} (no encontrada)</span>) : '—' },
+                { key: 'ciudad', header: 'Ciudad', nowrap: true, render: (f) =>
+                    f._ciudadTexto ? (f._ciudadId ? f._ciudadTexto : <span style={{ color: 'var(--critical)' }}>{f._ciudadTexto} (no encontrada)</span>) : '—' },
                 { key: 'placas', header: 'Placas', nowrap: true, render: (f) => f.placas ?? '—' },
                 { key: 'estatus', header: '', nowrap: true, render: (f) =>
                     f._codigoDuplicado ? <Badge color="var(--critical)">ya existe — se omite</Badge> : <Badge color="var(--good)">nueva</Badge> },

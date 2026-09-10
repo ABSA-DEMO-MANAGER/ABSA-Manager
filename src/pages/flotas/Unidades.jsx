@@ -11,7 +11,7 @@ const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inacti
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
 
 const FORM_VACIO = {
-  codigo: '', sucursal_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
+  codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
   conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
   tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
@@ -24,7 +24,7 @@ export default function Unidades() {
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [busca, setBusca] = useState('');
-  const [fSuc, setFSuc] = useState('');
+  const [fCiudad, setFCiudad] = useState('');
   const [fEstado, setFEstado] = useState('');
 
   const [modal, setModal] = useState(false);
@@ -33,20 +33,20 @@ export default function Unidades() {
   const [formError, setFormError] = useState(null);
 
   async function cargar() {
-    const [v, s, doc] = await Promise.all([
+    const [v, c, doc] = await Promise.all([
       supabase.from('flota_vehiculos')
-        .select('id, codigo, sucursal_id, marca, modelo, anio, tipo, placas, propiedad, estado, km, conductor_nombre, licencia_vence, proximo_servicio_km, proximo_servicio_fecha')
+        .select('id, codigo, ciudad_id, marca, modelo, anio, tipo, placas, propiedad, estado, km, conductor_nombre, licencia_vence, proximo_servicio_km, proximo_servicio_fecha')
         .order('codigo'),
-      supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
+      supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('vehiculo_id, vence'),
     ]);
-    const err = v.error || s.error || doc.error;
+    const err = v.error || c.error || doc.error;
     if (err) { setError(err.message); return; }
-    setD({ vehiculos: v.data, sucursales: s.data, documentos: doc.data });
+    setD({ vehiculos: v.data, ciudades: c.data, documentos: doc.data });
   }
   useEffect(() => { cargar(); }, []);
 
-  const sucById = useMemo(() => Object.fromEntries((d?.sucursales ?? []).map((s) => [s.id, s])), [d]);
+  const ciudadById = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.id, c])), [d]);
 
   const alertaPorVehiculo = useMemo(() => {
     if (!d) return {};
@@ -71,10 +71,10 @@ export default function Unidades() {
     if (!d) return [];
     const q = busca.trim().toLowerCase();
     return d.vehiculos.filter((v) =>
-      (!fSuc || String(v.sucursal_id) === fSuc) &&
+      (!fCiudad || String(v.ciudad_id) === fCiudad) &&
       (!fEstado || v.estado === fEstado) &&
       (!q || [v.codigo, v.marca, v.modelo, v.placas, v.conductor_nombre].some((x) => x?.toLowerCase().includes(q))));
-  }, [d, busca, fSuc, fEstado]);
+  }, [d, busca, fCiudad, fEstado]);
 
   function abrirNuevo() {
     setForm(FORM_VACIO);
@@ -89,7 +89,7 @@ export default function Unidades() {
     setGuardando(true);
     const { error: err } = await supabase.from('flota_vehiculos').insert({
       codigo: form.codigo.trim() || null,
-      sucursal_id: form.sucursal_id ? Number(form.sucursal_id) : null,
+      ciudad_id: form.ciudad_id ? Number(form.ciudad_id) : null,
       marca: form.marca.trim() || null, modelo: form.modelo.trim() || null,
       anio: form.anio ? Number(form.anio) : null, tipo: form.tipo.trim() || null,
       motor: form.motor.trim() || null, color: form.color.trim() || null,
@@ -133,7 +133,7 @@ export default function Unidades() {
         <Stat label="Unidades registradas" value={d.vehiculos.length} />
         <Stat label="Con alerta" value={conAlerta} tone={conAlerta ? 'critical' : 'good'} />
         <Stat label="En mantenimiento" value={d.vehiculos.filter((v) => v.estado === 'en_mantenimiento').length} />
-        <Stat label="Sucursales cubiertas" value={new Set(d.vehiculos.map((v) => v.sucursal_id).filter(Boolean)).size} />
+        <Stat label="Ciudades cubiertas" value={new Set(d.vehiculos.map((v) => v.ciudad_id).filter(Boolean)).size} />
       </div>
 
       {d.vehiculos.length === 0 && (
@@ -146,9 +146,9 @@ export default function Unidades() {
         <div className="mb-4 flex flex-wrap gap-2">
           <Input placeholder="Buscar por código, marca, placas, conductor…" value={busca}
                  onChange={(e) => setBusca(e.target.value)} className="!w-auto min-w-[220px] flex-1" />
-          <Select value={fSuc} onChange={(e) => setFSuc(e.target.value)} className="!w-auto">
-            <option value="">Todas las sucursales</option>
-            {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          <Select value={fCiudad} onChange={(e) => setFCiudad(e.target.value)} className="!w-auto">
+            <option value="">Todas las ciudades</option>
+            {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </Select>
           <Select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="!w-auto">
             <option value="">Todos los estados</option>
@@ -166,7 +166,7 @@ export default function Unidades() {
                   <div>{[v.marca, v.modelo, v.anio].filter(Boolean).join(' ') || 'Sin datos'}</div>
                   {v.placas && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{v.placas}</div>}
                 </div>) },
-            { key: 'sucursal_id', header: 'Sucursal', nowrap: true, render: (v) => sucById[v.sucursal_id]?.codigo ?? '—' },
+            { key: 'ciudad_id', header: 'Ciudad', nowrap: true, render: (v) => ciudadById[v.ciudad_id]?.nombre ?? '—' },
             { key: 'conductor_nombre', header: 'Conductor', render: (v) => v.conductor_nombre ?? 'Sin asignar' },
             { key: 'estado', header: 'Estado', nowrap: true,
               render: (v) => <Badge color={COLOR_ESTADO[v.estado]}>{ESTADOS[v.estado]}</Badge> },
@@ -183,10 +183,10 @@ export default function Unidades() {
             <Campo label="Código / No. económico">
               <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
             </Campo>
-            <Campo label="Sucursal">
-              <Select value={form.sucursal_id} onChange={(e) => setForm({ ...form, sucursal_id: e.target.value })}>
+            <Campo label="Ciudad">
+              <Select value={form.ciudad_id} onChange={(e) => setForm({ ...form, ciudad_id: e.target.value })}>
                 <option value="">Sin asignar</option>
-                {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </Select>
             </Campo>
           </div>
