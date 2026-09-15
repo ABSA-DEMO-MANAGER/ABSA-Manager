@@ -61,7 +61,9 @@ export default function LimpiezaLayout() {
   }
 
   const nav = limpiezaPerfil.rol === 'admin'
-    ? [...NAV, { to: '/limpieza/usuarios', label: 'Usuarios', icono: '☺' }]
+    ? [...NAV,
+        { to: '/limpieza/carga', label: 'Carga masiva', icono: '⇪' },
+        { to: '/limpieza/usuarios', label: 'Usuarios', icono: '☺' }]
     : NAV;
 
   return (
