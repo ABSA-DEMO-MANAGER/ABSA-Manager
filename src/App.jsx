@@ -21,6 +21,12 @@ import Siniestros from './pages/flotas/Siniestros';
 import Costos from './pages/flotas/Costos';
 import Combustible from './pages/flotas/Combustible';
 import CargaMasiva from './pages/flotas/CargaMasiva';
+import LimpiezaLayout from './pages/limpieza/LimpiezaLayout';
+import Inventario from './pages/limpieza/Inventario';
+import Planeacion from './pages/limpieza/Planeacion';
+import Insumos from './pages/limpieza/Insumos';
+import Ubicaciones from './pages/limpieza/Ubicaciones';
+import UsuariosLimpieza from './pages/limpieza/UsuariosLimpieza';
 import { Cargando } from './components/ui';
 
 function Rutas() {
@@ -56,6 +62,15 @@ function Rutas() {
         <Route path="combustible" element={<Combustible />} />
         <Route path="carga" element={<CargaMasiva />} />
         <Route path="*" element={<Unidades />} />
+      </Route>
+
+      <Route path="/limpieza" element={<LimpiezaLayout />}>
+        <Route index element={<Inventario />} />
+        <Route path="planeacion" element={<Planeacion />} />
+        <Route path="insumos" element={<Insumos />} />
+        <Route path="ubicaciones" element={<Ubicaciones />} />
+        <Route path="usuarios" element={<UsuariosLimpieza />} />
+        <Route path="*" element={<Inventario />} />
       </Route>
 
       <Route path="*" element={<Hub />} />

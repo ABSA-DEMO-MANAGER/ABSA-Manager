@@ -14,6 +14,11 @@ const APPS = [
     icono: '🚚',
   },
   {
+    to: '/limpieza', externo: false,
+    nombre: 'Limpieza', desc: 'Insumos, inventario y compras',
+    icono: '🧴',
+  },
+  {
     to: '/demos/index.html', externo: true,
     nombre: 'Demos', desc: 'Gestión de equipo demo',
     icono: '📦',
@@ -44,7 +49,7 @@ export default function Hub() {
       </header>
 
       <main className="flex flex-1 items-center justify-center px-5 pb-16">
-        <div className="w-full max-w-3xl">
+        <div className="w-full max-w-4xl">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">¿Qué necesitas hoy?</h1>
             <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -52,7 +57,7 @@ export default function Hub() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {APPS.map((app) => {
               const contenido = (
                 <>
