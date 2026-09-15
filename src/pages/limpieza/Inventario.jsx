@@ -6,13 +6,13 @@ import {
   Card, Tabla, Select, Cargando, Aviso, Badge, Stat, Boton, Modal, Campo, Input, Textarea,
 } from '../../components/ui';
 
-const FORM_VACIO = { insumo_id: '', tipo: 'salida', cantidad: '', costo_unitario: '', fecha: new Date().toISOString().slice(0, 10), motivo: '' };
+const FORM_VACIO = { insumo_id: '', tipo: 'salida', cantidad: '', costo_unitario: '', fecha: new Date().toISOString().slice(0, 10), retirado_por_nombre: '', motivo: '' };
 
 export default function Inventario() {
   const { limpiezaPerfil, esLimpiezaAdmin, puedeCapturar } = useLimpiezaPerfil();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
-  const [ubicacionId, setUbicacionId] = useState('');
+  const [sucursalId, setSucursalId] = useState('');
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
@@ -23,27 +23,27 @@ export default function Inventario() {
   const [minValor, setMinValor] = useState('');
 
   async function cargar() {
-    const [u, i, s, m] = await Promise.all([
-      supabase.from('limpieza_ubicaciones').select('id, nombre').eq('activa', true).order('nombre'),
-      supabase.from('limpieza_insumos').select('id, nombre, categoria, unidad_medida, stock_minimo_default').eq('activo', true).order('nombre'),
-      supabase.from('limpieza_stock').select('ubicacion_id, insumo_id, cantidad_actual, stock_minimo'),
+    const [suc, i, s, m] = await Promise.all([
+      supabase.from('sucursales').select('id, codigo, nombre').eq('activa', true).order('codigo'),
+      supabase.from('limpieza_insumos').select('id, nombre, marca, categoria, unidad_medida, stock_minimo_default').eq('activo', true).order('nombre'),
+      supabase.from('limpieza_stock').select('sucursal_id, insumo_id, cantidad_actual, stock_minimo'),
       supabase.from('limpieza_movimientos')
-        .select('id, ubicacion_id, insumo_id, tipo, cantidad, costo_unitario, motivo, fecha, creado_en')
-        .order('creado_en', { ascending: false }).limit(200),
+        .select('id, sucursal_id, insumo_id, tipo, cantidad, costo_unitario, retirado_por_nombre, motivo, fecha, creado_en')
+        .order('creado_en', { ascending: false }).limit(300),
     ]);
-    const err = u.error || i.error || s.error || m.error;
+    const err = suc.error || i.error || s.error || m.error;
     if (err) { setError(err.message); return; }
-    setD({ ubicaciones: u.data, insumos: i.data, stock: s.data, movimientos: m.data });
-    setUbicacionId((prev) => prev || (u.data[0] ? String(u.data[0].id) : ''));
+    setD({ sucursales: suc.data, insumos: i.data, stock: s.data, movimientos: m.data });
+    setSucursalId((prev) => prev || (suc.data[0] ? String(suc.data[0].id) : ''));
   }
   useEffect(() => { cargar(); }, []);
 
   const stockPorInsumo = useMemo(() => {
-    if (!d || !ubicacionId) return {};
+    if (!d || !sucursalId) return {};
     return Object.fromEntries(
-      d.stock.filter((s) => String(s.ubicacion_id) === ubicacionId).map((s) => [s.insumo_id, s]),
+      d.stock.filter((s) => String(s.sucursal_id) === sucursalId).map((s) => [s.insumo_id, s]),
     );
-  }, [d, ubicacionId]);
+  }, [d, sucursalId]);
 
   const filas = useMemo(() => {
     if (!d) return [];
@@ -57,10 +57,10 @@ export default function Inventario() {
 
   const bajos = filas.filter((f) => f.bajo).length;
 
-  const movimientosUbicacion = useMemo(() => {
-    if (!d || !ubicacionId) return [];
-    return d.movimientos.filter((m) => String(m.ubicacion_id) === ubicacionId).slice(0, 15);
-  }, [d, ubicacionId]);
+  const movimientosSucursal = useMemo(() => {
+    if (!d || !sucursalId) return [];
+    return d.movimientos.filter((m) => String(m.sucursal_id) === sucursalId).slice(0, 15);
+  }, [d, sucursalId]);
 
   const insumoById = useMemo(() => Object.fromEntries((d?.insumos ?? []).map((i) => [i.id, i])), [d]);
 
@@ -72,16 +72,17 @@ export default function Inventario() {
   async function guardar(e) {
     e.preventDefault();
     setFormError(null);
-    if (!ubicacionId) return setFormError('Selecciona una ubicación.');
+    if (!sucursalId) return setFormError('Selecciona una sucursal.');
     if (!form.insumo_id) return setFormError('Selecciona un insumo.');
     const cantidad = Number(form.cantidad);
     if (!cantidad || cantidad <= 0) return setFormError('Escribe una cantidad mayor a 0.');
 
     setGuardando(true);
     const { error: err } = await supabase.from('limpieza_movimientos').insert({
-      ubicacion_id: Number(ubicacionId), insumo_id: Number(form.insumo_id), tipo: form.tipo,
+      sucursal_id: Number(sucursalId), insumo_id: Number(form.insumo_id), tipo: form.tipo,
       cantidad, costo_unitario: form.tipo === 'entrada' && form.costo_unitario !== '' ? Number(form.costo_unitario) : null,
-      fecha: form.fecha, motivo: form.motivo.trim() || null, registrado_por: limpiezaPerfil.perfil_id,
+      fecha: form.fecha, retirado_por_nombre: form.retirado_por_nombre.trim() || null,
+      motivo: form.motivo.trim() || null, registrado_por: limpiezaPerfil.perfil_id,
     });
     setGuardando(false);
     if (err) return setFormError(err.message);
@@ -95,7 +96,7 @@ export default function Inventario() {
   async function guardarMinimo(insumo_id) {
     const stock_minimo = minValor === '' ? null : Number(minValor);
     const { error: err } = await supabase.from('limpieza_stock')
-      .upsert({ ubicacion_id: Number(ubicacionId), insumo_id, stock_minimo }, { onConflict: 'ubicacion_id,insumo_id' });
+      .upsert({ sucursal_id: Number(sucursalId), insumo_id, stock_minimo }, { onConflict: 'sucursal_id,insumo_id' });
     if (err) { alert(err.message); return; }
     setMinEditando(null); cargar();
   }
@@ -103,7 +104,7 @@ export default function Inventario() {
   if (error) return <Aviso tono="critical">No se pudo cargar el inventario: {error}</Aviso>;
   if (!d) return <Cargando />;
 
-  const ubicacionActual = d.ubicaciones.find((u) => String(u.id) === ubicacionId);
+  const sucursalActual = d.sucursales.find((s) => String(s.id) === sucursalId);
 
   return (
     <div className="space-y-5">
@@ -111,38 +112,40 @@ export default function Inventario() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Inventario</h1>
           <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Existencia de insumos por ubicación.
+            Existencia de insumos por sucursal.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={ubicacionId} onChange={(e) => setUbicacionId(e.target.value)} className="!w-auto">
-            {d.ubicaciones.length === 0 && <option value="">Sin ubicaciones</option>}
-            {d.ubicaciones.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+          <Select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className="!w-auto">
+            {d.sucursales.length === 0 && <option value="">Sin sucursales</option>}
+            {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </Select>
-          {puedeCapturar && d.ubicaciones.length > 0 && <Boton onClick={() => abrirMovimiento()}>+ Registrar movimiento</Boton>}
+          {puedeCapturar && d.sucursales.length > 0 && <Boton onClick={() => abrirMovimiento()}>+ Registrar movimiento</Boton>}
         </div>
       </div>
 
-      {d.ubicaciones.length === 0 ? (
+      {d.sucursales.length === 0 ? (
         <Aviso tono="warning">
-          Todavía no hay ubicaciones. {esLimpiezaAdmin ? 'Da de alta la primera en "Ubicaciones".' : 'Pídele a un administrador de Limpieza que las capture.'}
+          Todavía no hay sucursales activas. Se capturan en Mantenimiento → Sucursales.
         </Aviso>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="Insumos activos" value={d.insumos.length} />
             <Stat label="Bajo mínimo" value={bajos} tone={bajos ? 'critical' : 'good'} />
-            <Stat label="Movimientos (30 recientes)" value={movimientosUbicacion.length} />
+            <Stat label="Movimientos recientes" value={movimientosSucursal.length} />
           </div>
 
-          <Card title={`Existencia — ${ubicacionActual?.nombre ?? ''}`}>
+          <Card title={`Existencia — ${sucursalActual?.nombre ?? ''}`}>
             <Tabla
               vacio="Sin insumos activos en el catálogo."
               columnas={[
                 { key: 'nombre', header: 'Insumo', render: (f) => (
                     <div>
                       <div className="font-medium">{f.insumo.nombre}</div>
-                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{f.insumo.categoria || 'Sin categoría'}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {[f.insumo.marca, f.insumo.categoria].filter(Boolean).join(' · ') || 'Sin categoría'}
+                      </div>
                     </div>) },
                 { key: 'cantidad', header: 'Existencia', align: 'right', render: (f) => (
                     <span className="tnum" style={f.bajo ? { color: 'var(--critical)', fontWeight: 600 } : undefined}>
@@ -176,7 +179,7 @@ export default function Inventario() {
             <Card className="!p-0">
               <div className="p-4 sm:p-5">
                 <Tabla
-                  vacio="Sin movimientos registrados en esta ubicación."
+                  vacio="Sin movimientos registrados en esta sucursal."
                   columnas={[
                     { key: 'fecha', header: 'Fecha', nowrap: true, render: (m) => fechaCorta(m.fecha) },
                     { key: 'insumo', header: 'Insumo', render: (m) => insumoById[m.insumo_id]?.nombre ?? '—' },
@@ -185,9 +188,10 @@ export default function Inventario() {
                       ) },
                     { key: 'cantidad', header: 'Cantidad', align: 'right', render: (m) => `${m.cantidad} ${insumoById[m.insumo_id]?.unidad_medida ?? ''}` },
                     { key: 'costo', header: 'Costo', align: 'right', render: (m) => m.costo_unitario ? money(m.costo_unitario * m.cantidad) : '—' },
+                    { key: 'retiro', header: 'Retiró', render: (m) => m.retirado_por_nombre || '—' },
                     { key: 'motivo', header: 'Motivo', render: (m) => m.motivo || '—' },
                   ]}
-                  filas={movimientosUbicacion}
+                  filas={movimientosSucursal}
                 />
               </div>
             </Card>
@@ -197,12 +201,12 @@ export default function Inventario() {
 
       <Modal abierto={modal} onClose={() => setModal(false)} titulo="Registrar movimiento">
         <form onSubmit={guardar} className="space-y-3">
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Ubicación: <strong>{ubicacionActual?.nombre}</strong></p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Sucursal: <strong>{sucursalActual?.nombre}</strong></p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Campo label="Insumo" required>
               <Select value={form.insumo_id} required onChange={(e) => setForm({ ...form, insumo_id: e.target.value })}>
                 <option value="">Selecciona…</option>
-                {d.insumos.map((i) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+                {d.insumos.map((i) => <option key={i.id} value={i.id}>{i.nombre}{i.marca ? ` (${i.marca})` : ''}</option>)}
               </Select>
             </Campo>
             <Campo label="Tipo">
@@ -217,9 +221,13 @@ export default function Inventario() {
             <Campo label="Fecha">
               <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
             </Campo>
-            {form.tipo === 'entrada' && (
+            {form.tipo === 'entrada' ? (
               <Campo label="Costo unitario (MXN)" hint="Opcional">
                 <Input type="number" min="0" step="0.01" value={form.costo_unitario} onChange={(e) => setForm({ ...form, costo_unitario: e.target.value })} />
+              </Campo>
+            ) : (
+              <Campo label="Quién lo retiró" hint="Opcional — control contra fugas">
+                <Input value={form.retirado_por_nombre} onChange={(e) => setForm({ ...form, retirado_por_nombre: e.target.value })} />
               </Campo>
             )}
           </div>

@@ -25,7 +25,6 @@ import LimpiezaLayout from './pages/limpieza/LimpiezaLayout';
 import Inventario from './pages/limpieza/Inventario';
 import Planeacion from './pages/limpieza/Planeacion';
 import Insumos from './pages/limpieza/Insumos';
-import Ubicaciones from './pages/limpieza/Ubicaciones';
 import UsuariosLimpieza from './pages/limpieza/UsuariosLimpieza';
 import { Cargando } from './components/ui';
 
@@ -68,7 +67,6 @@ function Rutas() {
         <Route index element={<Inventario />} />
         <Route path="planeacion" element={<Planeacion />} />
         <Route path="insumos" element={<Insumos />} />
-        <Route path="ubicaciones" element={<Ubicaciones />} />
         <Route path="usuarios" element={<UsuariosLimpieza />} />
         <Route path="*" element={<Inventario />} />
       </Route>
