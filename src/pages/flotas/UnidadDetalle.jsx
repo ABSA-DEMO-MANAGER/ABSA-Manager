@@ -48,7 +48,7 @@ const SERV_VACIO = {
 export default function UnidadDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { esFlotaAdmin, flotaPerfil } = useFlotaPerfil();
+  const { esFlotaAdmin, flotaPerfil, puedeVerEquipo } = useFlotaPerfil();
 
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
@@ -77,7 +77,7 @@ export default function UnidadDetalle() {
   const [formServ, setFormServ] = useState(SERV_VACIO);
 
   async function cargar() {
-    const [v, s, docs, servs, hist, insp] = await Promise.all([
+    const [v, s, docs, servs, hist, insp, bit] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
@@ -90,13 +90,16 @@ export default function UnidadDetalle() {
       supabase.from('flota_vehiculo_fotos')
         .select('id, punto, archivo_path, creado_en')
         .eq('vehiculo_id', id).order('creado_en', { ascending: true }),
+      supabase.from('flota_bitacora')
+        .select('id, accion, antes, despues, hecho_por, creado_en')
+        .eq('vehiculo_id', id).order('creado_en', { ascending: false }).limit(30),
     ]);
-    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error;
+    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
     setD({
       vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
-      historialConductores: hist.data, galeria: insp.data,
+      historialConductores: hist.data, galeria: insp.data, bitacora: bit.data,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
@@ -466,6 +469,37 @@ export default function UnidadDetalle() {
         </div>
       )}
 
+      {puedeVerEquipo && d.bitacora?.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-base font-semibold tracking-tight">Bitácora de cambios</h2>
+          <div className="space-y-2">
+            {d.bitacora.map((b) => (
+              <Card key={b.id} className="!p-3 sm:!p-4">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  <Badge color={b.accion === 'baja' ? 'var(--critical)' : b.accion === 'alta' ? 'var(--good)' : 'var(--series-1)'}>
+                    {b.accion === 'alta' ? 'Alta' : b.accion === 'baja' ? 'Baja' : 'Edición'}
+                  </Badge>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {fechaCorta(b.creado_en?.slice(0, 10))} {new Date(b.creado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                {b.accion === 'edicion' ? (
+                  <ul className="space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    {diffCampos(b.antes, b.despues).map(({ campo, antes, despues }) => (
+                      <li key={campo}><strong>{campo}</strong>: {String(antes ?? '—')} → {String(despues ?? '—')}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {b.accion === 'alta' ? 'Unidad dada de alta.' : 'Unidad dada de baja.'}
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Documentos</h2>
@@ -832,4 +866,30 @@ function ChecklistFotos({ valor, onChange }) {
       ))}
     </div>
   );
+}
+
+const CAMPO_IGNORADO = new Set(['id', 'creado_en']);
+const CAMPO_LABEL = {
+  codigo: 'Código', ciudad_id: 'Ciudad', marca: 'Marca', modelo: 'Modelo', anio: 'Año',
+  tipo: 'Tipo', motor: 'Motor', color: 'Color', placas: 'Placas', vin: 'VIN',
+  propiedad: 'Propiedad', estado: 'Estado', km: 'Kilometraje', valor: 'Valor',
+  conductor_nombre: 'Conductor', conductor_telefono: 'Teléfono', conductor_correo: 'Correo',
+  conductor_licencia: 'Licencia', licencia_vence: 'Vence licencia',
+  puesto: 'Puesto', departamento: 'Departamento', jefe_directo: 'Jefe directo', tipo_prestacion: 'Tipo de prestación',
+  proximo_servicio_km: 'Próximo servicio (km)', proximo_servicio_fecha: 'Próximo servicio (fecha)',
+  notas: 'Notas', cajon_pesos: 'Cajón (pesos)', cajon_litros: 'Cajón (litros)',
+};
+
+function diffCampos(antes, despues) {
+  if (!antes || !despues) return [];
+  const campos = new Set([...Object.keys(antes), ...Object.keys(despues)]);
+  const out = [];
+  campos.forEach((campo) => {
+    if (CAMPO_IGNORADO.has(campo)) return;
+    const a = antes[campo], b = despues[campo];
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      out.push({ campo: CAMPO_LABEL[campo] || campo, antes: a, despues: b });
+    }
+  });
+  return out;
 }

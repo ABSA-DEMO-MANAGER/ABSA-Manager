@@ -20,7 +20,7 @@ export function useFlotaPerfil() {
     (async () => {
       const uid = sesion.user.id;
       const { data, error: errSelect } = await supabase.from('flota_perfiles')
-        .select('perfil_id, rol, vehiculo_asignado_id')
+        .select('perfil_id, rol, vehiculo_asignado_id, supervisor_id')
         .eq('perfil_id', uid).maybeSingle();
 
       if (!vivo) return;
@@ -36,7 +36,7 @@ export function useFlotaPerfil() {
       } else {
         const { data: nuevo, error: errInsert } = await supabase.from('flota_perfiles')
           .insert({ perfil_id: uid })
-          .select('perfil_id, rol, vehiculo_asignado_id').maybeSingle();
+          .select('perfil_id, rol, vehiculo_asignado_id, supervisor_id').maybeSingle();
         if (!vivo) return;
         if (errInsert) {
           setError(errInsert.message);
@@ -51,8 +51,11 @@ export function useFlotaPerfil() {
     return () => { vivo = false; };
   }, [sesion]);
 
-  const esFlotaAdmin = flotaPerfil?.rol === 'admin';
-  const aprobado = !!flotaPerfil && ['admin', 'gerente', 'usuario'].includes(flotaPerfil.rol);
+  const esFlotaAdmin = flotaPerfil?.rol === 'admin';   // Administrador General
+  const esDirector = flotaPerfil?.rol === 'director';
+  const esGerente = flotaPerfil?.rol === 'gerente';
+  const puedeVerEquipo = ['admin', 'director', 'gerente'].includes(flotaPerfil?.rol);
+  const aprobado = !!flotaPerfil && ['admin', 'director', 'gerente', 'usuario'].includes(flotaPerfil.rol);
 
-  return { flotaPerfil, cargando, esFlotaAdmin, aprobado, error };
+  return { flotaPerfil, cargando, esFlotaAdmin, esDirector, esGerente, puedeVerEquipo, aprobado, error };
 }

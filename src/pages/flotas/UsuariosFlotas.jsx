@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { fechaCorta } from '../../lib/format';
-import { Card, Tabla, Cargando, Aviso } from '../../components/ui';
+import { Card, Tabla, Cargando, Aviso, Select } from '../../components/ui';
 
-const ROLES = { admin: 'Administrador', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
+const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 
 export default function UsuariosFlotas() {
   const { flotaPerfil } = useFlotaPerfil();
@@ -19,6 +19,11 @@ export default function UsuariosFlotas() {
   }
   useEffect(() => { cargar(); }, []);
 
+  const posiblesSupervisores = useMemo(
+    () => (usuarios ?? []).filter((u) => ['admin', 'director', 'gerente'].includes(u.rol)),
+    [usuarios],
+  );
+
   async function cambiarRol(u, rol) {
     if (u.id === flotaPerfil.perfil_id && rol !== 'admin') {
       if (!confirm('Vas a quitarte a ti mismo el rol de administrador de Flotas. ¿Seguro?')) return;
@@ -26,6 +31,15 @@ export default function UsuariosFlotas() {
     setCambiando(u.id);
     const { error: err } = await supabase.from('flota_perfiles')
       .upsert({ perfil_id: u.id, rol }, { onConflict: 'perfil_id' });
+    setCambiando(null);
+    if (err) { alert(err.message); return; }
+    cargar();
+  }
+
+  async function cambiarSupervisor(u, supervisorId) {
+    setCambiando(u.id);
+    const { error: err } = await supabase.from('flota_perfiles')
+      .upsert({ perfil_id: u.id, rol: u.rol, supervisor_id: supervisorId || null }, { onConflict: 'perfil_id' });
     setCambiando(null);
     if (err) { alert(err.message); return; }
     cargar();
@@ -39,13 +53,15 @@ export default function UsuariosFlotas() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Usuarios de Flotas</h1>
         <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          {usuarios.length} cuentas de la empresa — asígnales un rol para que puedan entrar
+          {usuarios.length} cuentas de la empresa — asígnales un rol y, si aplica, su supervisor
         </p>
       </div>
 
       <Aviso>
-        <strong>Administrador</strong>: todo. · <strong>Gerente</strong> y <strong>Usuario</strong>: consultan
-        el inventario. · <strong>Pendiente</strong>: sin acceso todavía.
+        <strong>Administrador General</strong>: todo, incluye editar unidades y ver la bitácora. ·{' '}
+        <strong>Director</strong> y <strong>Gerente</strong>: lo mismo que Usuario, más el costo y las
+        solicitudes de su propio equipo (definido por "Supervisor" abajo). · <strong>Usuario</strong>: solo su
+        propia unidad. · <strong>Pendiente</strong>: sin acceso todavía.
       </Aviso>
 
       <Card>
@@ -68,6 +84,16 @@ export default function UsuariosFlotas() {
                           style={{ background: 'var(--plane)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
                     {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
+                )) },
+            { key: 'supervisor', header: 'Supervisor', nowrap: true, render: (u) => (
+                ['admin'].includes(u.rol) ? <span style={{ color: 'var(--text-muted)' }}>—</span> : (
+                  <Select value={u.supervisor_id ?? ''} onChange={(e) => cambiarSupervisor(u, e.target.value)}
+                          className="!w-auto !py-1 text-xs">
+                    <option value="">Sin asignar</option>
+                    {posiblesSupervisores.filter((s) => s.id !== u.id).map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre} · {ROLES[s.rol]}</option>
+                    ))}
+                  </Select>
                 )) },
           ]}
           filas={usuarios}

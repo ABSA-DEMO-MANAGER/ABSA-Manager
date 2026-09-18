@@ -11,7 +11,7 @@ const NAV = [
   { to: '/flotas/costos', label: 'Costos', icono: '💵' },
 ];
 
-const ROLES = { admin: 'Administrador', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
+const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 
 export default function FlotasLayout() {
   const { flotaPerfil, cargando, aprobado, error } = useFlotaPerfil();
