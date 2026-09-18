@@ -6,8 +6,6 @@ import { Card, Tabla, Boton, Aviso, Badge, Cargando } from '../../components/ui'
 const COLUMNAS = [
   'codigo', 'ciudad', 'marca', 'modelo', 'anio', 'tipo', 'motor', 'color', 'placas', 'vin',
   'propiedad', 'estado', 'km', 'valor',
-  'conductor_nombre', 'conductor_telefono', 'conductor_correo', 'conductor_licencia', 'licencia_vence',
-  'tipo_prestacion', 'puesto', 'jefe_directo', 'departamento',
   'proximo_servicio_km', 'proximo_servicio_fecha',
   'verificacion_vence', 'seguro_vence', 'tenencia_vence', 'circulacion_vence',
   'arrendadora', 'contrato_fin',
@@ -16,8 +14,6 @@ const COLUMNAS = [
 const FILA_EJEMPLO = [
   'ECO-1001', 'Guadalajara', 'Nissan', 'NP300', '2023', 'Pickup', '2.5L 4 cil.', 'Blanco', 'JAB-12-34', '3N6AD33C4MK000000',
   'arrendado', 'activo', '42000', '520000',
-  'Nombre Apellido', '+52 33 1234 5678', 'correo@grupoabsa.com', 'B-1234567', '2027-05-14',
-  'Nómina', 'Repartidor', 'Juan Pérez', 'Logística',
   '48000', '2026-11-10',
   '2026-11-30', '2027-01-15', '2027-03-31', '2028-06-01',
   'Element Fleet México', '2027-02-01',
@@ -100,11 +96,6 @@ export default function CargaMasiva() {
           propiedad: /arrend/i.test(o.propiedad || '') ? 'arrendado' : 'propio',
           estado: ['activo', 'en_mantenimiento', 'inactivo'].includes((o.estado || '').toLowerCase()) ? o.estado.toLowerCase() : 'activo',
           km: num(o.km) ?? 0, valor: num(o.valor),
-          conductor_nombre: txt(o.conductor_nombre), conductor_telefono: txt(o.conductor_telefono),
-          conductor_correo: txt(o.conductor_correo), conductor_licencia: txt(o.conductor_licencia),
-          licencia_vence: txt(o.licencia_vence),
-          tipo_prestacion: txt(o.tipo_prestacion), puesto: txt(o.puesto),
-          jefe_directo: txt(o.jefe_directo), departamento: txt(o.departamento),
           proximo_servicio_km: num(o.proximo_servicio_km), proximo_servicio_fecha: txt(o.proximo_servicio_fecha),
           verificacion_vence: txt(o.verificacion_vence), seguro_vence: txt(o.seguro_vence),
           tenencia_vence: txt(o.tenencia_vence), circulacion_vence: txt(o.circulacion_vence),
@@ -125,11 +116,6 @@ export default function CargaMasiva() {
         codigo: f.codigo, ciudad_id: f._ciudadId, marca: f.marca, modelo: f.modelo, anio: f.anio,
         tipo: f.tipo, motor: f.motor, color: f.color, placas: f.placas, vin: f.vin,
         propiedad: f.propiedad, estado: f.estado, km: f.km, valor: f.valor,
-        conductor_nombre: f.conductor_nombre, conductor_telefono: f.conductor_telefono,
-        conductor_correo: f.conductor_correo, conductor_licencia: f.conductor_licencia,
-        licencia_vence: f.licencia_vence,
-        tipo_prestacion: f.tipo_prestacion, puesto: f.puesto,
-        jefe_directo: f.jefe_directo, departamento: f.departamento,
         proximo_servicio_km: f.proximo_servicio_km, proximo_servicio_fecha: f.proximo_servicio_fecha,
       }).select('id').maybeSingle();
 
@@ -171,6 +157,7 @@ export default function CargaMasiva() {
           <li>Fechas en formato <strong>AAAA-MM-DD</strong> (ej. 2026-11-30). Deja vacío lo que no aplique.</li>
           <li><strong>propiedad</strong>: "propio" o "arrendado". <strong>estado</strong>: "activo", "en_mantenimiento" o "inactivo".</li>
           <li>Si el <strong>código</strong> ya existe en el sistema, esa fila se omite al importar (no se duplica).</li>
+          <li>Las unidades se crean <strong>sin conductor</strong> — el conductor solo se asigna a un usuario ya registrado en Flotas, entrando a la unidad y usando "Asignar conductor" (ahí también se toman las fotos de entrega).</li>
         </ul>
         <Boton variant="ghost" onClick={descargarPlantilla}>Descargar plantilla CSV</Boton>
       </Card>

@@ -13,8 +13,6 @@ const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)'
 const FORM_VACIO = {
   codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
   placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
-  conductor_nombre: '', conductor_telefono: '', conductor_correo: '', conductor_licencia: '', licencia_vence: '',
-  tipo_prestacion: '', puesto: '', jefe_directo: '', departamento: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -96,13 +94,6 @@ export default function Unidades() {
       placas: form.placas.trim() || null, vin: form.vin.trim() || null,
       propiedad: form.propiedad, estado: form.estado,
       km: form.km === '' ? 0 : Number(form.km), valor: form.valor === '' ? null : Number(form.valor),
-      conductor_nombre: form.conductor_nombre.trim() || null,
-      conductor_telefono: form.conductor_telefono.trim() || null,
-      conductor_correo: form.conductor_correo.trim() || null,
-      conductor_licencia: form.conductor_licencia.trim() || null,
-      licencia_vence: form.licencia_vence || null,
-      tipo_prestacion: form.tipo_prestacion.trim() || null, puesto: form.puesto.trim() || null,
-      jefe_directo: form.jefe_directo.trim() || null, departamento: form.departamento.trim() || null,
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -222,28 +213,10 @@ export default function Unidades() {
             <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
           </Campo>
 
-          <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-            <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Conductor asignado</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Nombre"><Input value={form.conductor_nombre} onChange={(e) => setForm({ ...form, conductor_nombre: e.target.value })} /></Campo>
-              <Campo label="Teléfono"><Input value={form.conductor_telefono} onChange={(e) => setForm({ ...form, conductor_telefono: e.target.value })} /></Campo>
-            </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Correo"><Input value={form.conductor_correo} onChange={(e) => setForm({ ...form, conductor_correo: e.target.value })} /></Campo>
-              <Campo label="Licencia"><Input value={form.conductor_licencia} onChange={(e) => setForm({ ...form, conductor_licencia: e.target.value })} /></Campo>
-            </div>
-            <Campo label="Vencimiento de licencia" hint="Opcional">
-              <Input type="date" value={form.licencia_vence} onChange={(e) => setForm({ ...form, licencia_vence: e.target.value })} />
-            </Campo>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Puesto"><Input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} /></Campo>
-              <Campo label="Departamento"><Input value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} /></Campo>
-            </div>
-            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Jefe directo"><Input value={form.jefe_directo} onChange={(e) => setForm({ ...form, jefe_directo: e.target.value })} /></Campo>
-              <Campo label="Tipo de prestación"><Input value={form.tipo_prestacion} onChange={(e) => setForm({ ...form, tipo_prestacion: e.target.value })} /></Campo>
-            </div>
-          </div>
+          <p className="rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            El conductor se asigna después de crear la unidad, entrando a su detalle y usando
+            "Asignar conductor" — solo se puede asignar a alguien ya registrado en Flotas.
+          </p>
 
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio</div>

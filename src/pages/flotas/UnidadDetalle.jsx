@@ -15,9 +15,10 @@ const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)'
 
 const PUNTOS = ['Puertas delante', 'Puertas detrás', 'Espejos', 'Interiores'];
 const PUNTOS_TODOS = [...PUNTOS, 'Otras'];
+const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 const conductorVacio = () => ({
-  nombre: '', telefono: '', correo: '', licencia: '', licencia_vence: '',
-  puesto: '', departamento: '', jefe_directo: '', tipo_prestacion: '',
+  persona_id: '', telefono: '', licencia: '', licencia_vence: '',
+  puesto: '', departamento: '', supervisor_id: '', tipo_prestacion: '',
 });
 const fotosVacias = () => Object.fromEntries(PUNTOS_TODOS.map((p) => [p, []]));
 const cuentaFotos = (f) => Object.values(f).reduce((a, arr) => a + arr.length, 0);
@@ -77,7 +78,7 @@ export default function UnidadDetalle() {
   const [formServ, setFormServ] = useState(SERV_VACIO);
 
   async function cargar() {
-    const [v, s, docs, servs, hist, insp, bit] = await Promise.all([
+    const [v, s, docs, servs, hist, insp, bit, per] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
@@ -93,18 +94,25 @@ export default function UnidadDetalle() {
       supabase.from('flota_bitacora')
         .select('id, accion, antes, despues, hecho_por, creado_en')
         .eq('vehiculo_id', id).order('creado_en', { ascending: false }).limit(30),
+      supabase.rpc('flota_listar_usuarios'),
     ]);
-    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error;
+    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error || per.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
     setD({
       vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
-      historialConductores: hist.data, galeria: insp.data, bitacora: bit.data,
+      historialConductores: hist.data, galeria: insp.data, bitacora: bit.data, personas: per.data ?? [],
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
 
   const ciudadById = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.id, c])), [d]);
+  const personaById = useMemo(() => Object.fromEntries((d?.personas ?? []).map((p) => [p.id, p])), [d]);
+  const personasAsignables = useMemo(() => (d?.personas ?? []).filter((p) => p.rol !== 'pendiente'), [d]);
+  const posiblesGerentes = useMemo(
+    () => (d?.personas ?? []).filter((p) => ['admin', 'director', 'gerente'].includes(p.rol)),
+    [d],
+  );
 
   const alertas = useMemo(() => {
     if (!d) return [];
@@ -180,6 +188,14 @@ export default function UnidadDetalle() {
     setConductorForm(conductorVacio());
   }
 
+  function seleccionarPersona(personaId) {
+    const persona = personaById[personaId];
+    setConductorForm({
+      ...conductorForm, persona_id: personaId,
+      supervisor_id: persona?.supervisor_id ?? '',
+    });
+  }
+
   async function ejecutarReasignar(e) {
     e.preventDefault();
     setReasigError(null);
@@ -188,25 +204,33 @@ export default function UnidadDetalle() {
     if (cuentaFotos(fotosNuevas) === 0) {
       return setReasigError('Sube al menos una foto del estado actual de la unidad.');
     }
-    if (asignaNuevo && !conductorForm.nombre.trim()) {
-      return setReasigError('Escribe el nombre del nuevo conductor.');
+    const personaNueva = asignaNuevo ? personaById[conductorForm.persona_id] : null;
+    if (asignaNuevo && !personaNueva) {
+      return setReasigError('Selecciona el usuario registrado que va a conducir la unidad.');
     }
 
     setGuardando(true);
     try {
       const kmNum = inspKm === '' ? null : Number(inspKm);
+      const vehiculoIdNum = Number(id);
 
-      // 1. Actualizar la unidad (dispara el archivado del conductor saliente)
+      // persona que trae esta unidad ahorita (si tiene cuenta registrada)
+      const personaSaliente = (d.personas ?? []).find((p) => p.vehiculo_asignado_id === vehiculoIdNum);
+      // si a la persona nueva ya se le habia asignado otra unidad, hay que liberar esa otra
+      const otraUnidadId = personaNueva && personaNueva.vehiculo_asignado_id && personaNueva.vehiculo_asignado_id !== vehiculoIdNum
+        ? personaNueva.vehiculo_asignado_id : null;
+
+      // 1. Actualizar la unidad
       const patch = asignaNuevo
         ? {
-            conductor_nombre: conductorForm.nombre.trim(),
+            conductor_nombre: personaNueva.nombre,
             conductor_telefono: conductorForm.telefono.trim() || null,
-            conductor_correo: conductorForm.correo.trim() || null,
+            conductor_correo: personaNueva.email || null,
             conductor_licencia: conductorForm.licencia.trim() || null,
             licencia_vence: conductorForm.licencia_vence || null,
             puesto: conductorForm.puesto.trim() || null,
             departamento: conductorForm.departamento.trim() || null,
-            jefe_directo: conductorForm.jefe_directo.trim() || null,
+            jefe_directo: conductorForm.supervisor_id ? (personaById[conductorForm.supervisor_id]?.nombre ?? null) : null,
             tipo_prestacion: conductorForm.tipo_prestacion.trim() || null,
           }
         : {
@@ -218,7 +242,30 @@ export default function UnidadDetalle() {
       const { error: eUpd } = await supabase.from('flota_vehiculos').update(patch).eq('id', id);
       if (eUpd) throw eUpd;
 
-      // 2. La galería nueva reemplaza a la anterior (se borran las fotos pasadas)
+      // 2. Liberar a quien traia esta unidad antes (si es una persona distinta a la nueva)
+      if (personaSaliente && personaSaliente.id !== conductorForm.persona_id) {
+        await supabase.from('flota_perfiles').update({ vehiculo_asignado_id: null }).eq('perfil_id', personaSaliente.id);
+      }
+
+      // 3. Si la persona nueva traia otra unidad, esa otra se queda sin conductor
+      if (otraUnidadId) {
+        await supabase.from('flota_vehiculos').update({
+          conductor_nombre: null, conductor_telefono: null, conductor_correo: null,
+          conductor_licencia: null, licencia_vence: null, puesto: null, departamento: null,
+          jefe_directo: null, tipo_prestacion: null,
+        }).eq('id', otraUnidadId);
+      }
+
+      // 4. Vincular (o soltar) el perfil de la persona nueva a esta unidad y su gerente
+      if (asignaNuevo) {
+        const { error: ePerfil } = await supabase.from('flota_perfiles').update({
+          vehiculo_asignado_id: vehiculoIdNum,
+          supervisor_id: conductorForm.supervisor_id || null,
+        }).eq('perfil_id', conductorForm.persona_id);
+        if (ePerfil) throw ePerfil;
+      }
+
+      // 5. La galería nueva reemplaza a la anterior (se borran las fotos pasadas)
       await borrarGaleriaActual();
       await subirFotos(fotosNuevas);
 
@@ -759,15 +806,23 @@ export default function UnidadDetalle() {
             {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Nuevo conductor</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Campo label="Nombre" required>
-                    <Input value={conductorForm.nombre} required onChange={(e) => setConductorForm({ ...conductorForm, nombre: e.target.value })} />
-                  </Campo>
+                <Campo label="Usuario registrado" required hint="Solo se puede asignar a alguien con cuenta en Flotas — así puede ver la información de su propia unidad">
+                  <Select value={conductorForm.persona_id} required onChange={(e) => seleccionarPersona(e.target.value)}>
+                    <option value="">Selecciona…</option>
+                    {personasAsignables.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre} · {ROLES[p.rol]} · {p.email}</option>
+                    ))}
+                  </Select>
+                </Campo>
+                {conductorForm.persona_id && personaById[conductorForm.persona_id]?.vehiculo_asignado_id
+                  && personaById[conductorForm.persona_id].vehiculo_asignado_id !== Number(id) && (
+                  <p className="mt-2 text-xs" style={{ color: 'var(--serious)' }}>
+                    Esta persona ya tiene otra unidad asignada — se la vamos a quitar de ahí para dársela a esta.
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Campo label="Teléfono">
                     <Input value={conductorForm.telefono} onChange={(e) => setConductorForm({ ...conductorForm, telefono: e.target.value })} />
-                  </Campo>
-                  <Campo label="Correo">
-                    <Input value={conductorForm.correo} onChange={(e) => setConductorForm({ ...conductorForm, correo: e.target.value })} />
                   </Campo>
                   <Campo label="Licencia">
                     <Input value={conductorForm.licencia} onChange={(e) => setConductorForm({ ...conductorForm, licencia: e.target.value })} />
@@ -781,12 +836,24 @@ export default function UnidadDetalle() {
                   <Campo label="Departamento">
                     <Input value={conductorForm.departamento} onChange={(e) => setConductorForm({ ...conductorForm, departamento: e.target.value })} />
                   </Campo>
-                  <Campo label="Jefe directo">
-                    <Input value={conductorForm.jefe_directo} onChange={(e) => setConductorForm({ ...conductorForm, jefe_directo: e.target.value })} />
-                  </Campo>
                   <Campo label="Tipo de prestación">
                     <Input value={conductorForm.tipo_prestacion} onChange={(e) => setConductorForm({ ...conductorForm, tipo_prestacion: e.target.value })} />
                   </Campo>
+                </div>
+                <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                  <Campo label="Gerente" hint="Define su equipo — de aquí sale también su Director, si el gerente ya tiene uno asignado">
+                    <Select value={conductorForm.supervisor_id} onChange={(e) => setConductorForm({ ...conductorForm, supervisor_id: e.target.value })}>
+                      <option value="">Sin asignar</option>
+                      {posiblesGerentes.filter((g) => g.id !== conductorForm.persona_id).map((g) => (
+                        <option key={g.id} value={g.id}>{g.nombre} · {ROLES[g.rol]}</option>
+                      ))}
+                    </Select>
+                  </Campo>
+                  {conductorForm.supervisor_id && personaById[conductorForm.supervisor_id]?.supervisor_id && (
+                    <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      Director: {personaById[personaById[conductorForm.supervisor_id].supervisor_id]?.nombre ?? '—'}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
