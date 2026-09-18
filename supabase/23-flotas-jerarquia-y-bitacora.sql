@@ -62,7 +62,9 @@ as $$
 $$;
 
 -- se agrega supervisor_id a la lista de usuarios para poder asignarlo
-create or replace function flota_listar_usuarios()
+-- (cambia el tipo de retorno, hay que quitar la version anterior primero)
+drop function if exists flota_listar_usuarios();
+create function flota_listar_usuarios()
 returns table (id uuid, nombre text, rol text, email text, supervisor_id uuid, creado_en timestamptz)
 language sql security definer set search_path = public, auth
 as $$
