@@ -61,12 +61,16 @@ export default function FlotasLayout() {
     );
   }
 
-  const nav = flotaPerfil.rol === 'admin'
-    ? [...NAV,
-        { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
-        { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
-        { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' }]
-    : NAV;
+  let nav = NAV;
+  if (['admin', 'director', 'gerente'].includes(flotaPerfil.rol)) {
+    nav = [...nav, { to: '/flotas/tablero', label: 'Tablero', icono: '📊' }];
+  }
+  if (flotaPerfil.rol === 'admin') {
+    nav = [...nav,
+      { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
+      { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
+      { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' }];
+  }
 
   return (
     <AppShell appLabel="Flotas" appIcono="🚚" appSub="Gestión de activos"
