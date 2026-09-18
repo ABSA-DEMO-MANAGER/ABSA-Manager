@@ -19,6 +19,7 @@ import UsuariosFlotas from './pages/flotas/UsuariosFlotas';
 import Tickets from './pages/flotas/Tickets';
 import Siniestros from './pages/flotas/Siniestros';
 import Tablero from './pages/flotas/Tablero';
+import Gasolina from './pages/flotas/Gasolina';
 import Costos from './pages/flotas/Costos';
 import Combustible from './pages/flotas/Combustible';
 import CargaMasiva from './pages/flotas/CargaMasiva';
@@ -60,6 +61,7 @@ function Rutas() {
         <Route path="tickets" element={<Tickets />} />
         <Route path="siniestros" element={<Siniestros />} />
         <Route path="tablero" element={<Tablero />} />
+        <Route path="gasolina" element={<Gasolina />} />
         <Route path="costos" element={<Costos />} />
         <Route path="combustible" element={<Combustible />} />
         <Route path="carga" element={<CargaMasiva />} />
