@@ -3,18 +3,19 @@ import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { subirArchivo } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
-import { fechaCorta } from '../../lib/format';
+import { money, fechaCorta } from '../../lib/format';
 import {
   Card, Tabla, Select, Cargando, Aviso, Badge, Boton, Modal, Campo, Input, Textarea,
 } from '../../components/ui';
 
 const ESTATUS = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
 const COLOR_ESTATUS = { pendiente: 'var(--serious)', aprobada: 'var(--good)', rechazada: 'var(--critical)' };
+const KM_POR_DIA = 5; // margen de recorrido local por cada dia de viaje, ademas de la ruta
 
 const FORM_VACIO = {
-  motivo: 'viaje', ciudad_origen_id: '', ciudad_destino_id: '',
+  motivo: 'viaje', ciudad_origen_id: '', ciudad_destino_id: '', ida_y_vuelta: false,
   fecha_inicio: new Date().toISOString().slice(0, 10), fecha_regreso: '',
-  notas: '', kilometraje: '', foto: null,
+  notas: '', kilometraje: '', litros_solicitados: '', foto: null,
 };
 
 function distanciaEntre(distancias, aId, bId) {
@@ -22,6 +23,41 @@ function distanciaEntre(distancias, aId, bId) {
   const a = Math.min(Number(aId), Number(bId)), b = Math.max(Number(aId), Number(bId));
   const fila = distancias.find((d) => d.ciudad_a_id === a && d.ciudad_b_id === b);
   return fila ? Number(fila.km) : null;
+}
+
+function diasDeViaje(inicio, regreso) {
+  if (!inicio) return 1;
+  if (!regreso) return 1;
+  const dias = Math.round((new Date(regreso) - new Date(inicio)) / 86400000) + 1;
+  return dias > 0 ? dias : 1;
+}
+
+function parseCSV(texto) {
+  const filas = []; let fila = [], cur = '', comillas = false;
+  const t = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (comillas) {
+      if (c === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else comillas = false; }
+      else cur += c;
+    } else if (c === '"') comillas = true;
+    else if (c === ',') { fila.push(cur); cur = ''; }
+    else if (c === '\n') { fila.push(cur); filas.push(fila); fila = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur !== '' || fila.length) { fila.push(cur); filas.push(fila); }
+  return filas.filter((f) => f.some((v) => String(v).trim() !== ''));
+}
+
+function descargarPlantillaDistancias() {
+  const filas = [['ciudad_origen', 'ciudad_destino', 'km'], ['Guadalajara', 'Hermosillo', '850']];
+  const csv = filas.map((f) => f.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'plantilla_distancias.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function mailtoDecision({ sol, decision, motivoRechazo, vehLabel, personaById, ciudadById }) {
@@ -34,8 +70,9 @@ function mailtoDecision({ sol, decision, motivoRechazo, vehLabel, personaById, c
     `Solicitante: ${persona?.nombre ?? '—'}`,
     `Unidad: ${vehLabel}`,
     `Motivo: ${sol.motivo === 'viaje' ? 'Viaje' : 'Gasolina extra'}`,
-    sol.motivo === 'viaje' ? `Ruta: ${ciudadById[sol.ciudad_origen_id]?.nombre ?? '—'} → ${ciudadById[sol.ciudad_destino_id]?.nombre ?? '—'} (${sol.km_calculado ?? '—'} km)` : null,
+    sol.motivo === 'viaje' ? `Ruta: ${ciudadById[sol.ciudad_origen_id]?.nombre ?? '—'} → ${ciudadById[sol.ciudad_destino_id]?.nombre ?? '—'}${sol.ida_y_vuelta ? ' (ida y vuelta)' : ' (solo ida)'} — ${sol.km_calculado ?? '—'} km` : null,
     sol.motivo === 'viaje' ? `Fechas: ${sol.fecha_inicio ?? '—'} a ${sol.fecha_regreso ?? '—'}` : null,
+    `Litros solicitados: ${sol.litros_solicitados ?? '—'}${sol.monto_estimado ? ` (≈ ${money(sol.monto_estimado)})` : ''}`,
     `Kilometraje reportado: ${sol.kilometraje}`,
     sol.notas ? `Notas / justificación: ${sol.notas}` : null,
     '',
@@ -60,18 +97,24 @@ export default function Gasolina() {
   const [correoHref, setCorreoHref] = useState(null);
 
   const [distForm, setDistForm] = useState({ ciudad_a: '', ciudad_b: '', km: '' });
+  const [distFilas, setDistFilas] = useState(null);
+  const [importandoDist, setImportandoDist] = useState(false);
+
+  const [precioForm, setPrecioForm] = useState('');
+  const [editandoPrecio, setEditandoPrecio] = useState(false);
 
   async function cargar() {
-    const [s, c, dist, veh, per] = await Promise.all([
+    const [s, c, dist, veh, per, precio] = await Promise.all([
       supabase.from('flota_gasolina_solicitudes').select('*').order('creado_en', { ascending: false }),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_distancias').select('id, ciudad_a_id, ciudad_b_id, km'),
-      supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas'),
+      supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas, rendimiento_km_l'),
       supabase.rpc('flota_listar_usuarios'),
+      supabase.from('flota_precio_combustible').select('precio_litro').maybeSingle(),
     ]);
-    const err = s.error || c.error || dist.error || veh.error || per.error;
+    const err = s.error || c.error || dist.error || veh.error || per.error || precio.error;
     if (err) { setError(err.message); return; }
-    setD({ solicitudes: s.data, ciudades: c.data, distancias: dist.data, vehiculos: veh.data, personas: per.data });
+    setD({ solicitudes: s.data, ciudades: c.data, distancias: dist.data, vehiculos: veh.data, personas: per.data, precioLitro: Number(precio.data?.precio_litro ?? 0) });
   }
   useEffect(() => { cargar(); }, []);
 
@@ -84,6 +127,9 @@ export default function Gasolina() {
     () => distanciaEntre(d?.distancias ?? [], form.ciudad_origen_id, form.ciudad_destino_id),
     [d, form.ciudad_origen_id, form.ciudad_destino_id],
   );
+  const kmTotal = km !== null ? km * (form.ida_y_vuelta ? 2 : 1) : null;
+  const montoEstimadoForm = form.litros_solicitados && d?.precioLitro
+    ? Number(form.litros_solicitados) * d.precioLitro : null;
 
   const misSolicitudes = useMemo(
     () => (d?.solicitudes ?? []).filter((s) => s.solicitante_id === flotaPerfil?.perfil_id),
@@ -94,6 +140,8 @@ export default function Gasolina() {
     [d, flotaPerfil],
   );
   const porAprobar = useMemo(() => (d?.solicitudes ?? []).filter((s) => s.estatus === 'pendiente'), [d]);
+
+  const distanciaPorId = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.nombre.trim().toLowerCase(), c.id])), [d]);
 
   function abrirNueva() {
     setForm(FORM_VACIO); setFormError(null); setModal(true);
@@ -111,20 +159,24 @@ export default function Gasolina() {
       return setFormError('Escribe la justificación de la carga extra.');
     }
     if (!form.kilometraje || Number(form.kilometraje) <= 0) return setFormError('Escribe tu kilometraje actual.');
+    if (!form.litros_solicitados || Number(form.litros_solicitados) <= 0) return setFormError('Escribe cuántos litros necesitas.');
     if (!form.foto) return setFormError('La foto del kilometraje es obligatoria.');
 
     setGuardando(true);
     try {
       const ruta = await subirArchivo(form.foto, `flota/${vehiculo_id}/gasolina`);
+      const litros = Number(form.litros_solicitados);
       const { error: err } = await supabase.from('flota_gasolina_solicitudes').insert({
         vehiculo_id, solicitante_id: flotaPerfil.perfil_id, motivo: form.motivo,
         ciudad_origen_id: form.motivo === 'viaje' ? Number(form.ciudad_origen_id) : null,
         ciudad_destino_id: form.motivo === 'viaje' ? Number(form.ciudad_destino_id) : null,
-        km_calculado: form.motivo === 'viaje' ? km : null,
+        ida_y_vuelta: form.motivo === 'viaje' ? form.ida_y_vuelta : false,
+        km_calculado: form.motivo === 'viaje' ? kmTotal : null,
         fecha_inicio: form.motivo === 'viaje' ? form.fecha_inicio : null,
         fecha_regreso: form.motivo === 'viaje' ? (form.fecha_regreso || null) : null,
         notas: form.notas.trim() || null,
         kilometraje: Number(form.kilometraje), foto_km_path: ruta,
+        litros_solicitados: litros, monto_estimado: d.precioLitro ? Math.round(litros * d.precioLitro * 100) / 100 : null,
       });
       if (err) throw err;
       setModal(false); cargar();
@@ -174,6 +226,60 @@ export default function Gasolina() {
     cargar();
   }
 
+  function onArchivoDistancias(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const grid = parseCSV(String(reader.result));
+      if (grid.length < 2) { alert('El archivo no tiene datos'); return; }
+      const encabezado = grid[0].map((h) => h.trim().toLowerCase());
+      const filas = grid.slice(1).map((fila) => {
+        const o = {};
+        encabezado.forEach((col, i) => { o[col] = fila[i]; });
+        const origenTexto = String(o.ciudad_origen ?? '').trim();
+        const destinoTexto = String(o.ciudad_destino ?? '').trim();
+        const origenId = distanciaPorId[origenTexto.toLowerCase()] ?? null;
+        const destinoId = distanciaPorId[destinoTexto.toLowerCase()] ?? null;
+        const km = parseFloat(String(o.km ?? '').replace(/[^\d.]/g, ''));
+        return { origenTexto, destinoTexto, origenId, destinoId, km: isNaN(km) ? null : km };
+      });
+      setDistFilas(filas);
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  }
+
+  async function importarDistancias() {
+    const validas = distFilas.filter((f) => f.origenId && f.destinoId && f.origenId !== f.destinoId && f.km > 0);
+    if (!validas.length) return;
+    setImportandoDist(true);
+    let okN = 0;
+    for (const f of validas) {
+      const a = Math.min(f.origenId, f.destinoId), b = Math.max(f.origenId, f.destinoId);
+      const { error: err } = await supabase.from('flota_distancias')
+        .upsert({ ciudad_a_id: a, ciudad_b_id: b, km: f.km }, { onConflict: 'ciudad_a_id,ciudad_b_id' });
+      if (!err) okN++;
+    }
+    setImportandoDist(false);
+    setDistFilas(null);
+    alert(`${okN} distancia(s) guardadas.`);
+    cargar();
+  }
+
+  function abrirPrecio() {
+    setPrecioForm(String(d.precioLitro || ''));
+    setEditandoPrecio(true);
+  }
+  async function guardarPrecio(e) {
+    e.preventDefault();
+    const { error: err } = await supabase.from('flota_precio_combustible')
+      .update({ precio_litro: Number(precioForm) || 0, actualizado_en: new Date().toISOString() }).eq('id', true);
+    if (err) { alert(err.message); return; }
+    setEditandoPrecio(false);
+    cargar();
+  }
+
   if (error) return <Aviso tono="critical">No se pudieron cargar las solicitudes de gasolina: {error}</Aviso>;
   if (!d) return <Cargando />;
 
@@ -182,9 +288,30 @@ export default function Gasolina() {
     ...(mostrarSolicitante ? [{ key: 'solicitante', header: 'Solicitante', render: (s) => personaById[s.solicitante_id]?.nombre ?? '—' }] : []),
     { key: 'vehiculo', header: 'Unidad', render: (s) => nombreVeh(vehById[s.vehiculo_id]) },
     { key: 'motivo', header: 'Motivo', nowrap: true, render: (s) => s.motivo === 'viaje' ? 'Viaje' : 'Extra' },
+    { key: 'litros', header: 'Litros', align: 'right', render: (s) => s.litros_solicitados ?? '—' },
+    { key: 'monto', header: 'Costo est.', align: 'right', render: (s) => s.monto_estimado ? money(s.monto_estimado) : '—' },
     { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta(s.creado_en?.slice(0, 10)) },
     { key: 'estatus', header: 'Estatus', nowrap: true, render: (s) => <Badge color={COLOR_ESTATUS[s.estatus]}>{ESTATUS[s.estatus]}</Badge> },
   ];
+
+  // ---- "cuadre" del detalle en revision (solo aplica bien a motivo=viaje con distancia + rendimiento) ----
+  let cuadre = null;
+  if (detalle && detalle.motivo === 'viaje') {
+    const vehiculo = vehById[detalle.vehiculo_id];
+    const dias = diasDeViaje(detalle.fecha_inicio, detalle.fecha_regreso);
+    const kmEsperado = detalle.km_calculado != null ? Number(detalle.km_calculado) + KM_POR_DIA * dias : null;
+    const rendimiento = vehiculo?.rendimiento_km_l ? Number(vehiculo.rendimiento_km_l) : null;
+    const litrosEsperados = kmEsperado != null && rendimiento ? kmEsperado / rendimiento : null;
+    const litrosPedidos = Number(detalle.litros_solicitados) || 0;
+    let veredicto = null;
+    if (litrosEsperados) {
+      const ratio = litrosPedidos / litrosEsperados;
+      veredicto = ratio > 1.2 ? { texto: 'Parece alto', color: 'var(--critical)' }
+        : ratio < 0.8 ? { texto: 'Parece bajo', color: 'var(--serious)' }
+        : { texto: 'Razonable', color: 'var(--good)' };
+    }
+    cuadre = { dias, kmEsperado, rendimiento, litrosEsperados, litrosPedidos, veredicto };
+  }
 
   return (
     <div className="space-y-5">
@@ -219,7 +346,26 @@ export default function Gasolina() {
       )}
 
       {esFlotaAdmin && (
-        <Card title="Distancias entre ciudades" subtitle="Se usan para calcular los km de un viaje. Agrega los pares que falten.">
+        <Card title="Precio de la gasolina" subtitle="Se usa para calcular el costo estimado de cada solicitud.">
+          {editandoPrecio ? (
+            <form onSubmit={guardarPrecio} className="flex flex-wrap items-end gap-2">
+              <Campo label="Precio por litro (MXN)">
+                <Input type="number" min="0" step="0.01" value={precioForm} onChange={(e) => setPrecioForm(e.target.value)} className="!w-32" />
+              </Campo>
+              <Boton type="submit">Guardar</Boton>
+              <Boton type="button" variant="ghost" onClick={() => setEditandoPrecio(false)}>Cancelar</Boton>
+            </form>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold tracking-tight">{money(d.precioLitro)} <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>/ litro</span></span>
+              <Boton variant="ghost" onClick={abrirPrecio}>Actualizar precio</Boton>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {esFlotaAdmin && (
+        <Card title="Distancias entre ciudades" subtitle="Se usan para calcular los km de un viaje. Agrega los pares que falten, uno por uno o por CSV.">
           <form onSubmit={agregarDistancia} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Select value={distForm.ciudad_a} onChange={(e) => setDistForm({ ...distForm, ciudad_a: e.target.value })}>
               <option value="">Ciudad A</option>
@@ -232,6 +378,35 @@ export default function Gasolina() {
             <Input type="number" min="0" step="0.1" placeholder="Km" value={distForm.km} onChange={(e) => setDistForm({ ...distForm, km: e.target.value })} />
             <Boton type="submit">Guardar distancia</Boton>
           </form>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Carga masiva:</span>
+            <Boton variant="ghost" onClick={descargarPlantillaDistancias}>Descargar plantilla CSV</Boton>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ background: 'var(--series-1)' }}>
+              Subir CSV
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={onArchivoDistancias} />
+            </label>
+          </div>
+
+          {distFilas && (
+            <div className="mb-4 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <span>{distFilas.filter((f) => f.origenId && f.destinoId && f.km > 0).length} de {distFilas.length} filas listas</span>
+                <div className="flex-1" />
+                <Boton disabled={importandoDist} onClick={importarDistancias}>{importandoDist ? 'Importando…' : 'Importar distancias'}</Boton>
+              </div>
+              <Tabla
+                columnas={[
+                  { key: 'origen', header: 'Origen', render: (f) => f.origenId ? f.origenTexto : <span style={{ color: 'var(--critical)' }}>{f.origenTexto} (no encontrada)</span> },
+                  { key: 'destino', header: 'Destino', render: (f) => f.destinoId ? f.destinoTexto : <span style={{ color: 'var(--critical)' }}>{f.destinoTexto} (no encontrada)</span> },
+                  { key: 'km', header: 'Km', align: 'right', render: (f) => f.km ?? <span style={{ color: 'var(--critical)' }}>—</span> },
+                ]}
+                filas={distFilas.slice(0, 50)}
+              />
+              {distFilas.length > 50 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>…y {distFilas.length - 50} más</p>}
+            </div>
+          )}
+
           <Tabla
             vacio="Sin distancias registradas todavía."
             columnas={[
@@ -270,9 +445,13 @@ export default function Gasolina() {
                   </Select>
                 </Campo>
               </div>
+              <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <input type="checkbox" checked={form.ida_y_vuelta} onChange={(e) => setForm({ ...form, ida_y_vuelta: e.target.checked })} />
+                Es viaje redondo (ida y vuelta)
+              </label>
               {form.ciudad_origen_id && form.ciudad_destino_id && (
                 km !== null
-                  ? <Aviso>Distancia calculada: <strong>{km} km</strong> (ida).</Aviso>
+                  ? <Aviso>Distancia calculada: <strong>{kmTotal} km</strong> {form.ida_y_vuelta ? '(ida y vuelta)' : '(solo ida)'}.</Aviso>
                   : <Aviso tono="warning">No hay distancia registrada entre estas ciudades — se puede enviar igual, pídele al administrador que la agregue.</Aviso>
               )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -293,9 +472,18 @@ export default function Gasolina() {
             </Campo>
           )}
 
-          <Campo label="Kilometraje actual" required>
-            <Input type="number" min="0" step="1" value={form.kilometraje} required onChange={(e) => setForm({ ...form, kilometraje: e.target.value })} />
-          </Campo>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Campo label="Kilometraje actual" required>
+              <Input type="number" min="0" step="1" value={form.kilometraje} required onChange={(e) => setForm({ ...form, kilometraje: e.target.value })} />
+            </Campo>
+            <Campo label="Litros solicitados" required>
+              <Input type="number" min="0" step="0.1" value={form.litros_solicitados} required onChange={(e) => setForm({ ...form, litros_solicitados: e.target.value })} />
+            </Campo>
+          </div>
+          {montoEstimadoForm !== null && (
+            <Aviso>Costo estimado: <strong>{money(montoEstimadoForm)}</strong> (a {money(d.precioLitro)}/litro).</Aviso>
+          )}
+
           <Campo label="Foto del kilometraje" required hint="Obligatoria — tómala del tablero justo ahora">
             <input type="file" accept="image/*" capture="environment" required
                    onChange={(e) => setForm({ ...form, foto: e.target.files?.[0] ?? null })}
@@ -325,12 +513,14 @@ export default function Gasolina() {
               {detalle.motivo === 'viaje' ? (
                 <>
                   <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Ruta</div>
-                    <div>{ciudadById[detalle.ciudad_origen_id]?.nombre} → {ciudadById[detalle.ciudad_destino_id]?.nombre}{detalle.km_calculado ? ` (${detalle.km_calculado} km)` : ''}</div></div>
+                    <div>{ciudadById[detalle.ciudad_origen_id]?.nombre} → {ciudadById[detalle.ciudad_destino_id]?.nombre}{detalle.km_calculado ? ` (${detalle.km_calculado} km${detalle.ida_y_vuelta ? ', redondo' : ', solo ida'})` : ''}</div></div>
                   <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Fechas</div>
                     <div>{fechaCorta(detalle.fecha_inicio)} a {detalle.fecha_regreso ? fechaCorta(detalle.fecha_regreso) : '—'}</div></div>
                 </>
               ) : null}
               <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Kilometraje reportado</div><div>{detalle.kilometraje}</div></div>
+              <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Litros solicitados</div>
+                <div>{detalle.litros_solicitados ?? '—'}{detalle.monto_estimado ? ` (≈ ${money(detalle.monto_estimado)})` : ''}</div></div>
             </div>
             {detalle.notas && (
               <div>
@@ -344,6 +534,28 @@ export default function Gasolina() {
             </div>
             {detalle.estatus === 'rechazada' && detalle.motivo_rechazo && (
               <Aviso tono="critical"><strong>Motivo de rechazo:</strong> {detalle.motivo_rechazo}</Aviso>
+            )}
+
+            {esFlotaAdmin && detalle.motivo === 'viaje' && (
+              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Cuadre de la solicitud</div>
+                {!cuadre.kmEsperado ? (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No se puede calcular — falta la distancia entre estas ciudades.</p>
+                ) : !cuadre.rendimiento ? (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Distancia esperada: {Math.round(cuadre.kmEsperado)} km ({detalle.km_calculado} km de ruta + {KM_POR_DIA}×{cuadre.dias} días de margen).
+                    Falta el rendimiento (km/l) de la unidad para estimar litros — se define en "Editar unidad".
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <span>
+                      Distancia esperada: <strong>{Math.round(cuadre.kmEsperado)} km</strong> ({detalle.km_calculado} de ruta + {KM_POR_DIA}×{cuadre.dias} días) ·{' '}
+                      con {cuadre.rendimiento} km/l se esperan <strong>~{cuadre.litrosEsperados.toFixed(1)} litros</strong> · se pidieron <strong>{cuadre.litrosPedidos}</strong>.
+                    </span>
+                    <Badge color={cuadre.veredicto.color}>{cuadre.veredicto.texto}</Badge>
+                  </div>
+                )}
+              </div>
             )}
 
             {esFlotaAdmin && detalle.estatus === 'pendiente' && (

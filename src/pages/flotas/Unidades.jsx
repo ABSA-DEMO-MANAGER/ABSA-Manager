@@ -12,7 +12,7 @@ const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)'
 
 const FORM_VACIO = {
   codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
-  placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
+  placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '', rendimiento_km_l: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -94,6 +94,7 @@ export default function Unidades() {
       placas: form.placas.trim() || null, vin: form.vin.trim() || null,
       propiedad: form.propiedad, estado: form.estado,
       km: form.km === '' ? 0 : Number(form.km), valor: form.valor === '' ? null : Number(form.valor),
+      rendimiento_km_l: form.rendimiento_km_l === '' ? null : Number(form.rendimiento_km_l),
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -209,9 +210,14 @@ export default function Unidades() {
             </Campo>
             <Campo label="Kilometraje"><Input inputMode="numeric" value={form.km} onChange={(e) => setForm({ ...form, km: e.target.value })} /></Campo>
           </div>
-          <Campo label="Valor" hint="Opcional">
-            <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
-          </Campo>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Campo label="Valor" hint="Opcional">
+              <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
+            </Campo>
+            <Campo label="Rendimiento (km/litro)" hint="Para estimar consumo en solicitudes de gasolina">
+              <Input inputMode="decimal" value={form.rendimiento_km_l} onChange={(e) => setForm({ ...form, rendimiento_km_l: e.target.value })} />
+            </Campo>
+          </div>
 
           <p className="rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             El conductor se asigna después de crear la unidad, entrando a su detalle y usando

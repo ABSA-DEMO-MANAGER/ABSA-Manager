@@ -34,7 +34,7 @@ function estatusDoc(vence) {
 
 const FORM_VACIO = {
   codigo: '', ciudad_id: '', marca: '', modelo: '', anio: '', tipo: '', motor: '', color: '',
-  placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '',
+  placas: '', vin: '', propiedad: 'propio', estado: 'activo', km: '', valor: '', rendimiento_km_l: '',
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
@@ -133,6 +133,7 @@ export default function UnidadDetalle() {
       marca: v.marca ?? '', modelo: v.modelo ?? '', anio: v.anio ?? '', tipo: v.tipo ?? '',
       motor: v.motor ?? '', color: v.color ?? '', placas: v.placas ?? '', vin: v.vin ?? '',
       propiedad: v.propiedad, estado: v.estado, km: v.km ?? '', valor: v.valor ?? '',
+      rendimiento_km_l: v.rendimiento_km_l ?? '',
       proximo_servicio_km: v.proximo_servicio_km ?? '', proximo_servicio_fecha: v.proximo_servicio_fecha ?? '',
       notas: v.notas ?? '',
     });
@@ -152,6 +153,7 @@ export default function UnidadDetalle() {
       placas: form.placas.trim() || null, vin: form.vin.trim() || null,
       propiedad: form.propiedad, estado: form.estado,
       km: form.km === '' ? 0 : Number(form.km), valor: form.valor === '' ? null : Number(form.valor),
+      rendimiento_km_l: form.rendimiento_km_l === '' ? null : Number(form.rendimiento_km_l),
       proximo_servicio_km: form.proximo_servicio_km === '' ? null : Number(form.proximo_servicio_km),
       proximo_servicio_fecha: form.proximo_servicio_fecha || null,
       notas: form.notas.trim() || null,
@@ -646,9 +648,14 @@ export default function UnidadDetalle() {
               </Campo>
               <Campo label="Kilometraje"><Input inputMode="numeric" value={form.km} onChange={(e) => setForm({ ...form, km: e.target.value })} /></Campo>
             </div>
-            <Campo label="Valor">
-              <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
-            </Campo>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Valor">
+                <Input inputMode="decimal" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} />
+              </Campo>
+              <Campo label="Rendimiento (km/litro)" hint="Para el cuadre de solicitudes de gasolina">
+                <Input inputMode="decimal" value={form.rendimiento_km_l} onChange={(e) => setForm({ ...form, rendimiento_km_l: e.target.value })} />
+              </Campo>
+            </div>
 
             <p className="rounded-lg border p-2 text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               El conductor y sus datos se cambian con <strong>Asignar / Reasignar / Desasignar</strong> en la tarjeta
