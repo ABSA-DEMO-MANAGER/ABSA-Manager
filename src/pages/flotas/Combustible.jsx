@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta } from '../../lib/format';
-import { Card, Tabla, Cargando, Aviso, Badge, Boton, Modal, Campo, Input } from '../../components/ui';
+import { Card, Tabla, Cargando, Aviso, Badge, Boton, Modal, Campo, Input, Select } from '../../components/ui';
 
 const mesActual = () => new Date().toISOString().slice(0, 7);
 const fMes = (m) => {
@@ -35,6 +35,17 @@ function parseCSV(texto) {
   return filas.filter((f) => f.some((v) => String(v).trim() !== ''));
 }
 
+function descargarPlantillaDistancias() {
+  const filas = [['ciudad_origen', 'ciudad_destino', 'km'], ['Guadalajara', 'Hermosillo', '850']];
+  const csv = filas.map((f) => f.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'plantilla_distancias.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function descargarPlantillaFuel() {
   const csv = [FUEL_COLS, FUEL_EJEMPLO].map((f) => f.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -46,7 +57,7 @@ function descargarPlantillaFuel() {
 }
 
 export default function Combustible() {
-  const { flotaPerfil, esFlotaAdmin } = useFlotaPerfil();
+  const { flotaPerfil, esFlotaAdmin, puedeVerEquipo } = useFlotaPerfil();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [mes, setMes] = useState(mesActual());
@@ -63,18 +74,48 @@ export default function Combustible() {
   const [filas, setFilas] = useState(null); // preview CSV
   const [importando, setImportando] = useState(false);
 
+  const [distForm, setDistForm] = useState({ ciudad_a: '', ciudad_b: '', km: '' });
+  const [distFilas, setDistFilas] = useState(null);
+  const [importandoDist, setImportandoDist] = useState(false);
+  const [precioForm, setPrecioForm] = useState('');
+  const [editandoPrecio, setEditandoPrecio] = useState(false);
+
   async function cargar() {
-    const [v, g] = await Promise.all([
+    const [v, g, sol, ciu, dist, precio] = await Promise.all([
       supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas, cajon_pesos, cajon_litros').order('codigo'),
       supabase.from('flota_gastos')
         .select('id, vehiculo_id, categoria, monto, litros, fecha, mes, descripcion, estatus, origen, referencia')
         .in('categoria', ['Gasolina', 'Tag']),
+      supabase.from('flota_gasolina_solicitudes')
+        .select('id, folio, vehiculo_id, motivo, litros_solicitados, monto_estimado, monto_solicitado, estatus, resuelto_en, creado_en')
+        .eq('estatus', 'aprobada'),
+      supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
+      supabase.from('flota_distancias').select('id, ciudad_a_id, ciudad_b_id, km'),
+      supabase.from('flota_precio_combustible').select('precio_litro').maybeSingle(),
     ]);
-    const err = v.error || g.error;
+    const err = v.error || g.error || sol.error || ciu.error || dist.error || precio.error;
     if (err) { setError(err.message); return; }
-    setD({ vehiculos: v.data, gastos: g.data });
+    setD({
+      vehiculos: v.data, gastos: g.data, solicitudes: sol.data, ciudades: ciu.data,
+      distancias: dist.data, precioLitro: Number(precio.data?.precio_litro ?? 0),
+    });
   }
   useEffect(() => { cargar(); }, []);
+
+  const ciudadById = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.id, c])), [d]);
+
+  const solicitudesMes = useMemo(
+    () => (d?.solicitudes ?? []).filter((s) => (s.resuelto_en ?? s.creado_en)?.slice(0, 7) === mes),
+    [d, mes],
+  );
+  const aprobadoPorVehiculo = useMemo(() => {
+    const by = {};
+    solicitudesMes.forEach((s) => {
+      const monto = s.motivo === 'tag' ? Number(s.monto_solicitado || 0) : Number(s.monto_estimado || 0);
+      by[s.vehiculo_id] = (by[s.vehiculo_id] || 0) + monto;
+    });
+    return by;
+  }, [solicitudesMes]);
 
   const consumo = useMemo(() => {
     const by = {};
@@ -197,7 +238,79 @@ export default function Combustible() {
     cargar();
   }
 
-  if (!esFlotaAdmin) return <Aviso tono="critical">Solo un administrador de Flotas puede ver Combustible.</Aviso>;
+  async function agregarDistancia(e) {
+    e.preventDefault();
+    if (!distForm.ciudad_a || !distForm.ciudad_b || distForm.ciudad_a === distForm.ciudad_b) {
+      alert('Selecciona dos ciudades distintas.'); return;
+    }
+    const kmVal = Number(distForm.km);
+    if (!kmVal || kmVal <= 0) { alert('Escribe una distancia válida.'); return; }
+    const a = Math.min(Number(distForm.ciudad_a), Number(distForm.ciudad_b));
+    const b = Math.max(Number(distForm.ciudad_a), Number(distForm.ciudad_b));
+    const { error: err } = await supabase.from('flota_distancias')
+      .upsert({ ciudad_a_id: a, ciudad_b_id: b, km: kmVal }, { onConflict: 'ciudad_a_id,ciudad_b_id' });
+    if (err) { alert(err.message); return; }
+    setDistForm({ ciudad_a: '', ciudad_b: '', km: '' });
+    cargar();
+  }
+
+  const ciudadPorNombre = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.nombre.trim().toLowerCase(), c.id])), [d]);
+
+  function onArchivoDistancias(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const grid = parseCSV(String(reader.result));
+      if (grid.length < 2) { alert('El archivo no tiene datos'); return; }
+      const encabezado = grid[0].map((h) => h.trim().toLowerCase());
+      const filasParse = grid.slice(1).map((fila) => {
+        const o = {};
+        encabezado.forEach((col, i) => { o[col] = fila[i]; });
+        const origenTexto = String(o.ciudad_origen ?? '').trim();
+        const destinoTexto = String(o.ciudad_destino ?? '').trim();
+        const origenId = ciudadPorNombre[origenTexto.toLowerCase()] ?? null;
+        const destinoId = ciudadPorNombre[destinoTexto.toLowerCase()] ?? null;
+        const km = parseFloat(String(o.km ?? '').replace(/[^\d.]/g, ''));
+        return { origenTexto, destinoTexto, origenId, destinoId, km: isNaN(km) ? null : km };
+      });
+      setDistFilas(filasParse);
+    };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  }
+
+  async function importarDistancias() {
+    const validas = distFilas.filter((f) => f.origenId && f.destinoId && f.origenId !== f.destinoId && f.km > 0);
+    if (!validas.length) return;
+    setImportandoDist(true);
+    let okN = 0;
+    for (const f of validas) {
+      const a = Math.min(f.origenId, f.destinoId), b = Math.max(f.origenId, f.destinoId);
+      const { error: err } = await supabase.from('flota_distancias')
+        .upsert({ ciudad_a_id: a, ciudad_b_id: b, km: f.km }, { onConflict: 'ciudad_a_id,ciudad_b_id' });
+      if (!err) okN++;
+    }
+    setImportandoDist(false);
+    setDistFilas(null);
+    alert(`${okN} distancia(s) guardadas.`);
+    cargar();
+  }
+
+  function abrirPrecio() {
+    setPrecioForm(String(d.precioLitro || ''));
+    setEditandoPrecio(true);
+  }
+  async function guardarPrecio(e) {
+    e.preventDefault();
+    const { error: err } = await supabase.from('flota_precio_combustible')
+      .update({ precio_litro: Number(precioForm) || 0, actualizado_en: new Date().toISOString() }).eq('id', true);
+    if (err) { alert(err.message); return; }
+    setEditandoPrecio(false);
+    cargar();
+  }
+
+  if (!puedeVerEquipo) return <Aviso tono="critical">Esta vista es solo para Administrador General, Director y Gerente.</Aviso>;
   if (error) return <Aviso tono="critical">No se pudo cargar Combustible: {error}</Aviso>;
   if (!d) return <Cargando />;
 
@@ -225,49 +338,51 @@ export default function Combustible() {
         <Tarjeta label="Tags · mes" valor={money(Math.round(tTag))} />
       </div>
 
-      <Card title="Importar cargas de combustible"
-            subtitle="Exporta el consumo de tu proveedor (Sodexo u otro) a CSV con estas columnas. Cada renglón se enlaza a la unidad por placas y se registra como gasto aprobado. No se duplican cargas ya importadas (por folio).">
-        <div className="flex flex-wrap gap-2">
-          <Boton variant="ghost" onClick={descargarPlantillaFuel}>Descargar plantilla CSV</Boton>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ background: 'var(--series-1)' }}>
-            Elegir archivo CSV
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={onArchivo} />
-          </label>
-        </div>
-
-        {filas && (
-          <div className="mt-4 space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              <span>{listas.length} listas · {sinUnidad} sin unidad · {dups} ya importadas · Total {money(Math.round(listas.reduce((a, r) => a + r.importe, 0)))}</span>
-              <div className="flex-1" />
-              <Boton disabled={!listas.length || importando} onClick={confirmarImportacion}>
-                {importando ? 'Importando…' : `Importar ${listas.length} carga${listas.length !== 1 ? 's' : ''}`}
-              </Boton>
-            </div>
-            {sinUnidad > 0 && (
-              <Aviso>Las cargas "sin unidad" no coincidieron por placas. Revisa que las placas del CSV estén igual que en las unidades (se ignoran guiones y espacios).</Aviso>
-            )}
-            <Tabla
-              columnas={[
-                { key: 'fecha', header: 'Fecha', nowrap: true, render: (r) => r.fecha || '—' },
-                { key: 'placas', header: 'Placas', nowrap: true, render: (r) => r.o.placas || '—' },
-                { key: 'unidad', header: 'Unidad', render: (r) => r.v ? nombreVeh(r.v) : <span style={{ color: 'var(--critical)' }}>— sin unidad —</span> },
-                { key: 'cat', header: 'Categoría', nowrap: true },
-                { key: 'importe', header: 'Importe', align: 'right', render: (r) => money(Math.round(r.importe)) },
-                { key: 'estado', header: '', nowrap: true, render: (r) =>
-                    r.dup ? <Badge>Ya importada</Badge>
-                    : !r.v ? <Badge color="var(--critical)">Sin match</Badge>
-                    : r.importe > 0 ? <Badge color="var(--good)">Lista</Badge> : <Badge color="var(--serious)">Sin importe</Badge> },
-              ]}
-              filas={filas.slice(0, 30)}
-            />
-            {filas.length > 30 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>…y {filas.length - 30} más</p>}
+      {esFlotaAdmin && (
+        <Card title="Importar cargas de combustible"
+              subtitle="Exporta el consumo de tu proveedor (Sodexo u otro) a CSV con estas columnas. Cada renglón se enlaza a la unidad por placas y se registra como gasto aprobado. No se duplican cargas ya importadas (por folio).">
+          <div className="flex flex-wrap gap-2">
+            <Boton variant="ghost" onClick={descargarPlantillaFuel}>Descargar plantilla CSV</Boton>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ background: 'var(--series-1)' }}>
+              Elegir archivo CSV
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={onArchivo} />
+            </label>
           </div>
-        )}
-      </Card>
 
-      {pendientes.length > 0 && (
-        <Card title={`Solicitudes de carga extra por aprobar · ${pendientes.length}`}>
+          {filas && (
+            <div className="mt-4 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <span>{listas.length} listas · {sinUnidad} sin unidad · {dups} ya importadas · Total {money(Math.round(listas.reduce((a, r) => a + r.importe, 0)))}</span>
+                <div className="flex-1" />
+                <Boton disabled={!listas.length || importando} onClick={confirmarImportacion}>
+                  {importando ? 'Importando…' : `Importar ${listas.length} carga${listas.length !== 1 ? 's' : ''}`}
+                </Boton>
+              </div>
+              {sinUnidad > 0 && (
+                <Aviso>Las cargas "sin unidad" no coincidieron por placas. Revisa que las placas del CSV estén igual que en las unidades (se ignoran guiones y espacios).</Aviso>
+              )}
+              <Tabla
+                columnas={[
+                  { key: 'fecha', header: 'Fecha', nowrap: true, render: (r) => r.fecha || '—' },
+                  { key: 'placas', header: 'Placas', nowrap: true, render: (r) => r.o.placas || '—' },
+                  { key: 'unidad', header: 'Unidad', render: (r) => r.v ? nombreVeh(r.v) : <span style={{ color: 'var(--critical)' }}>— sin unidad —</span> },
+                  { key: 'cat', header: 'Categoría', nowrap: true },
+                  { key: 'importe', header: 'Importe', align: 'right', render: (r) => money(Math.round(r.importe)) },
+                  { key: 'estado', header: '', nowrap: true, render: (r) =>
+                      r.dup ? <Badge>Ya importada</Badge>
+                      : !r.v ? <Badge color="var(--critical)">Sin match</Badge>
+                      : r.importe > 0 ? <Badge color="var(--good)">Lista</Badge> : <Badge color="var(--serious)">Sin importe</Badge> },
+                ]}
+                filas={filas.slice(0, 30)}
+              />
+              {filas.length > 30 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>…y {filas.length - 30} más</p>}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {esFlotaAdmin && pendientes.length > 0 && (
+        <Card title={`Cargas registradas por aprobar · ${pendientes.length}`}>
           <Tabla
             columnas={[
               { key: 'veh', header: 'Unidad', render: (g) => nombreVeh(vehById[g.vehiculo_id]) },
@@ -281,6 +396,22 @@ export default function Combustible() {
                 ) },
             ]}
             filas={pendientes}
+          />
+        </Card>
+      )}
+
+      {solicitudesMes.length > 0 && (
+        <Card title={`Solicitudes de gasolina y tags aprobadas · ${fMes(mes)}`} subtitle="Vienen del módulo de Tickets — ya fueron autorizadas por un Administrador General.">
+          <Tabla
+            columnas={[
+              { key: 'folio', header: 'Folio', nowrap: true, render: (s) => <span className="tnum">{s.folio}</span> },
+              { key: 'veh', header: 'Unidad', render: (s) => nombreVeh(vehById[s.vehiculo_id]) },
+              { key: 'motivo', header: 'Motivo', nowrap: true, render: (s) => s.motivo === 'viaje' ? 'Viaje' : s.motivo === 'extra' ? 'Carga extra' : 'Tag' },
+              { key: 'litros', header: 'Litros', align: 'right', render: (s) => s.litros_solicitados ?? '—' },
+              { key: 'monto', header: 'Monto', align: 'right', render: (s) => money(s.motivo === 'tag' ? s.monto_solicitado : s.monto_estimado) },
+              { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta((s.resuelto_en ?? s.creado_en)?.slice(0, 10)) },
+            ]}
+            filas={solicitudesMes}
           />
         </Card>
       )}
@@ -302,25 +433,98 @@ export default function Combustible() {
                 const c = consumo[v.id] || { gasP: 0, gasL: 0 };
                 return <span className="tnum text-sm">{money(Math.round(c.gasP))}{c.gasL ? ` · ${Math.round(c.gasL)} L` : ''}</span>;
               } },
-            { key: 'extra', header: 'Extras mes', render: (v) => {
-                const c = consumo[v.id] || { exP: 0 };
-                return c.exP ? <span className="tnum text-sm" style={{ color: 'var(--serious)' }}>{money(Math.round(c.exP))}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>;
-              } },
+            { key: 'aprobado', header: 'Aprobado (tickets)', render: (v) => (
+                aprobadoPorVehiculo[v.id] ? <span className="tnum text-sm">{money(Math.round(aprobadoPorVehiculo[v.id]))}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>
+              ) },
             { key: 'tag', header: 'Tags mes', render: (v) => {
                 const c = consumo[v.id] || { tagP: 0 };
                 return c.tagP ? <span className="tnum text-sm">{money(Math.round(c.tagP))}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>;
               } },
-            { key: 'acciones', header: '', nowrap: true, render: (v) => (
+            ...(esFlotaAdmin ? [{ key: 'acciones', header: '', nowrap: true, render: (v) => (
                 <div className="flex justify-end gap-1.5">
                   <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => abrirCajon(v)}>Cajón</Boton>
                   <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => abrirExtra(v)}>Carga extra</Boton>
                   <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => abrirTag(v)}>Tags</Boton>
                 </div>
-              ) },
+              ) }] : []),
           ]}
           filas={d.vehiculos}
         />
       </Card>
+
+      {esFlotaAdmin && (
+        <Card title="Precio de la gasolina" subtitle="Se usa para calcular el costo estimado de las solicitudes de gasolina en Tickets.">
+          {editandoPrecio ? (
+            <form onSubmit={guardarPrecio} className="flex flex-wrap items-end gap-2">
+              <Campo label="Precio por litro (MXN)">
+                <Input type="number" min="0" step="0.01" value={precioForm} onChange={(e) => setPrecioForm(e.target.value)} className="!w-32" />
+              </Campo>
+              <Boton type="submit">Guardar</Boton>
+              <Boton type="button" variant="ghost" onClick={() => setEditandoPrecio(false)}>Cancelar</Boton>
+            </form>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold tracking-tight">{money(d.precioLitro)} <span className="text-xs font-normal" style={{ color: 'var(--text-muted)' }}>/ litro</span></span>
+              <Boton variant="ghost" onClick={abrirPrecio}>Actualizar precio</Boton>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {esFlotaAdmin && (
+        <Card title="Distancias entre ciudades" subtitle="Se usan para calcular los km de un viaje en Tickets. Agrega los pares que falten.">
+          <form onSubmit={agregarDistancia} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Select value={distForm.ciudad_a} onChange={(e) => setDistForm({ ...distForm, ciudad_a: e.target.value })}>
+              <option value="">Ciudad A</option>
+              {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </Select>
+            <Select value={distForm.ciudad_b} onChange={(e) => setDistForm({ ...distForm, ciudad_b: e.target.value })}>
+              <option value="">Ciudad B</option>
+              {d.ciudades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </Select>
+            <Input type="number" min="0" step="0.1" placeholder="Km" value={distForm.km} onChange={(e) => setDistForm({ ...distForm, km: e.target.value })} />
+            <Boton type="submit">Guardar distancia</Boton>
+          </form>
+
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Carga masiva:</span>
+            <Boton variant="ghost" onClick={descargarPlantillaDistancias}>Descargar plantilla CSV</Boton>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white" style={{ background: 'var(--series-1)' }}>
+              Subir CSV
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={onArchivoDistancias} />
+            </label>
+          </div>
+
+          {distFilas && (
+            <div className="mb-4 space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <span>{distFilas.filter((f) => f.origenId && f.destinoId && f.km > 0).length} de {distFilas.length} filas listas</span>
+                <div className="flex-1" />
+                <Boton disabled={importandoDist} onClick={importarDistancias}>{importandoDist ? 'Importando…' : 'Importar distancias'}</Boton>
+              </div>
+              <Tabla
+                columnas={[
+                  { key: 'origen', header: 'Origen', render: (f) => f.origenId ? f.origenTexto : <span style={{ color: 'var(--critical)' }}>{f.origenTexto} (no encontrada)</span> },
+                  { key: 'destino', header: 'Destino', render: (f) => f.destinoId ? f.destinoTexto : <span style={{ color: 'var(--critical)' }}>{f.destinoTexto} (no encontrada)</span> },
+                  { key: 'km', header: 'Km', align: 'right', render: (f) => f.km ?? <span style={{ color: 'var(--critical)' }}>—</span> },
+                ]}
+                filas={distFilas.slice(0, 50)}
+              />
+              {distFilas.length > 50 && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>…y {distFilas.length - 50} más</p>}
+            </div>
+          )}
+
+          <Tabla
+            vacio="Sin distancias registradas todavía."
+            columnas={[
+              { key: 'a', header: 'Ciudad A', render: (r) => ciudadById[r.ciudad_a_id]?.nombre ?? '—' },
+              { key: 'b', header: 'Ciudad B', render: (r) => ciudadById[r.ciudad_b_id]?.nombre ?? '—' },
+              { key: 'km', header: 'Km', align: 'right', render: (r) => r.km },
+            ]}
+            filas={d.distancias}
+          />
+        </Card>
+      )}
 
       {/* ---------------- Cajon ---------------- */}
       <Modal abierto={!!cajonModal} onClose={() => setCajonModal(null)} titulo="Cajón · carga semanal">

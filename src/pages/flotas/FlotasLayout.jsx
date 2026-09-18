@@ -4,15 +4,31 @@ import AppShell from '../../components/AppShell';
 import { Cargando, Aviso } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 
-const NAV = [
-  { to: '/flotas', label: 'Unidades', icono: '🚚', end: true },
-  { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
-  { to: '/flotas/siniestros', label: 'Siniestros', icono: '⚠' },
-  { to: '/flotas/gasolina', label: 'Gasolina', icono: '🛢' },
-  { to: '/flotas/costos', label: 'Costos', icono: '💵' },
-];
-
 const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
+
+function navPara(rol) {
+  if (rol === 'usuario') {
+    return [
+      { to: '/flotas', label: 'Mi unidad', icono: '🚚', end: true },
+      { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+    ];
+  }
+  const nav = [
+    { to: '/flotas', label: 'Unidades', icono: '🚚', end: true },
+    { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+    { to: '/flotas/siniestros', label: 'Siniestros', icono: '⚠' },
+    { to: '/flotas/costos', label: 'Costos', icono: '💵' },
+    { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
+    { to: '/flotas/tablero', label: 'Tablero', icono: '📊' },
+  ];
+  if (rol === 'admin') {
+    nav.push(
+      { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
+      { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' },
+    );
+  }
+  return nav;
+}
 
 export default function FlotasLayout() {
   const { flotaPerfil, cargando, aprobado, error } = useFlotaPerfil();
@@ -62,19 +78,8 @@ export default function FlotasLayout() {
     );
   }
 
-  let nav = NAV;
-  if (['admin', 'director', 'gerente'].includes(flotaPerfil.rol)) {
-    nav = [...nav, { to: '/flotas/tablero', label: 'Tablero', icono: '📊' }];
-  }
-  if (flotaPerfil.rol === 'admin') {
-    nav = [...nav,
-      { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
-      { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
-      { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' }];
-  }
-
   return (
     <AppShell appLabel="Flotas" appIcono="🚚" appSub="Gestión de activos"
-              nav={nav} rolLabel={ROLES[flotaPerfil.rol]} />
+              nav={navPara(flotaPerfil.rol)} rolLabel={ROLES[flotaPerfil.rol]} />
   );
 }
