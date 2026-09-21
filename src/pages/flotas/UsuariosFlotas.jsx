@@ -42,7 +42,7 @@ export default function UsuariosFlotas() {
   );
 
   async function cambiarRol(u, rol) {
-    if (u.id === flotaPerfil.perfil_id && rol !== 'admin') {
+    if (u.id === flotaPerfil?.perfil_id && rol !== 'admin') {
       if (!confirm('Vas a quitarte a ti mismo el rol de administrador de Flotas. ¿Seguro?')) return;
     }
     setCambiando(u.id);
@@ -88,7 +88,7 @@ export default function UsuariosFlotas() {
             { key: 'nombre', header: 'Nombre', render: (u) => (
                 <div>
                   {u.nombre}
-                  {u.id === flotaPerfil.perfil_id && <span className="ml-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>(tú)</span>}
+                  {u.id === flotaPerfil?.perfil_id && <span className="ml-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>(tú)</span>}
                 </div>) },
             { key: 'email', header: 'Correo' },
             { key: 'creado_en', header: 'Desde', nowrap: true, render: (u) => fechaCorta(u.creado_en?.slice(0, 10)) },
