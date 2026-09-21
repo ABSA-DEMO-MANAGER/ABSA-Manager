@@ -127,32 +127,32 @@ export default function CargaMasiva() {
 
   async function importar() {
     setImportando(true);
-    let creadas = 0, omitidas = 0, errores = 0, conConductor = 0;
+    let creadas = 0, omitidas = 0, errores = 0, vinculados = 0, precargados = 0;
     for (const f of filas) {
       if (f._codigoDuplicado) { omitidas++; continue; }
 
       const tieneConductor = !!f._persona;
       const notasExtra = [];
       if (f.notas) notasExtra.push(f.notas);
-      if (!tieneConductor && f.conductor_nombre) {
-        notasExtra.push(`Conductor propuesto (sin cuenta en Flotas todavía): ${[f.conductor_nombre, f.conductor_telefono, f.conductor_correo].filter(Boolean).join(' · ')}`);
-      }
       if (f._conductorConflicto) {
         notasExtra.push(`${f.conductor_nombre || 'El conductor propuesto'} ya tiene otra unidad asignada — no se vinculó automáticamente.`);
       }
 
+      // Los datos del conductor se guardan siempre en la unidad, tenga
+      // o no cuenta en el portal todavia. La cuenta (vehiculo_asignado_id)
+      // solo se vincula si ya existe; si no, se deja una "precarga" para
+      // que se vincule sola en cuanto esa persona entre por primera vez.
       const { data: nuevo, error: err } = await supabase.from('flota_vehiculos').insert({
         codigo: f.codigo, ciudad_id: f._ciudadId, marca: f.marca, modelo: f.modelo, anio: f.anio, tipo: f.tipo,
         version: f.version, motor: f.motor, color: f.color, placas: f.placas, vin: f.vin, origen_placa: f.origen_placa,
         propiedad: f.propiedad, estado: f.estado, km: f.km, valor: f.valor, costo_poliza: f.costo_poliza,
         proximo_servicio_km: f.proximo_servicio_km, proximo_servicio_fecha: f.proximo_servicio_fecha,
         notas: notasExtra.join(' · ') || null,
-        ...(tieneConductor ? {
-          conductor_nombre: f._persona.nombre, conductor_correo: f._persona.email,
-          conductor_telefono: f.conductor_telefono, conductor_licencia: f.conductor_licencia,
-          licencia_vence: f.licencia_vence, puesto: f.puesto, departamento: f.departamento,
-          jefe_directo: f.jefe_directo, tipo_prestacion: f.tipo_prestacion,
-        } : {}),
+        conductor_nombre: f.conductor_nombre,
+        conductor_correo: tieneConductor ? f._persona.email : f.conductor_correo,
+        conductor_telefono: f.conductor_telefono, conductor_licencia: f.conductor_licencia,
+        licencia_vence: f.licencia_vence, puesto: f.puesto, departamento: f.departamento,
+        area: f.area, jefe_directo: f.jefe_directo, tipo_prestacion: f.tipo_prestacion,
       }).select('id').maybeSingle();
 
       if (err || !nuevo) { errores++; continue; }
@@ -161,7 +161,15 @@ export default function CargaMasiva() {
       if (tieneConductor) {
         const { error: ePerfil } = await supabase.from('flota_perfiles')
           .update({ vehiculo_asignado_id: nuevo.id }).eq('perfil_id', f._persona.id);
-        if (!ePerfil) conConductor++;
+        if (!ePerfil) vinculados++;
+      } else if (f.conductor_correo && !f._conductorConflicto) {
+        const { error: ePre } = await supabase.from('flota_precarga').upsert({
+          correo: f.conductor_correo, nombre: f.conductor_nombre, vehiculo_id: nuevo.id,
+          telefono: f.conductor_telefono, licencia: f.conductor_licencia, licencia_vence: f.licencia_vence,
+          puesto: f.puesto, departamento: f.departamento, area: f.area,
+          jefe_directo: f.jefe_directo, tipo_prestacion: f.tipo_prestacion,
+        }, { onConflict: 'correo' });
+        if (!ePre) precargados++;
       }
 
       if (f.fecha_ultimo_servicio) {
@@ -183,7 +191,7 @@ export default function CargaMasiva() {
       }
     }
     setImportando(false);
-    setResultado({ creadas, omitidas, errores, conConductor });
+    setResultado({ creadas, omitidas, errores, vinculados, precargados });
     setFilas(null);
   }
 
@@ -206,7 +214,7 @@ export default function CargaMasiva() {
           <li>Fechas en formato <strong>AAAA-MM-DD</strong>. Deja vacío lo que no aplique.</li>
           <li><strong>propiedad</strong>: "propio" o "arrendado". <strong>estado</strong>: "activo", "en_mantenimiento" o "inactivo".</li>
           <li>Si el <strong>código</strong> ya existe en el sistema, esa fila se omite al importar (no se duplica).</li>
-          <li>El conductor solo se asigna si <strong>conductor_correo</strong> ya tiene cuenta registrada en Flotas — así puede ver su propia unidad. Si no tiene cuenta todavía, sus datos quedan anotados en "Notas" y lo asignas después con "Asignar conductor".</li>
+          <li>Los datos del conductor (nombre, teléfono, puesto, departamento, licencia, etc.) siempre se guardan en la unidad. Si <strong>conductor_correo</strong> ya tiene cuenta registrada en Flotas, se vincula de inmediato para que vea su propia unidad; si no tiene cuenta todavía, queda "precargado" y se vincula solo en cuanto esa persona entre por primera vez con ese correo.</li>
           <li>Si <strong>fecha_ultimo_servicio</strong> viene llena, se registra automáticamente como un servicio en el historial de la unidad.</li>
         </ul>
         <Boton variant="ghost" onClick={descargarPlantilla}>Descargar plantilla CSV</Boton>
@@ -220,7 +228,8 @@ export default function CargaMasiva() {
 
       {resultado && (
         <Aviso tono={resultado.errores ? 'warning' : 'good'}>
-          Se importaron <strong>{resultado.creadas}</strong> unidades ({resultado.conConductor} con conductor vinculado).
+          Se importaron <strong>{resultado.creadas}</strong> unidades ({resultado.vinculados} con conductor ya vinculado
+          a su cuenta, {resultado.precargados} precargados para vincularse en cuanto entren por primera vez).
           {resultado.omitidas > 0 && <> {resultado.omitidas} se omitieron por código duplicado.</>}
           {resultado.errores > 0 && <> {resultado.errores} tuvieron un error al guardarse.</>}
         </Aviso>
@@ -233,7 +242,7 @@ export default function CargaMasiva() {
             <Aviso tono="warning">Algunas filas tienen una ciudad que no reconozco — esas unidades se crearán sin ciudad asignada.</Aviso>
           )}
           {filas.some((f) => f._conductorSinCuenta) && (
-            <Aviso>Algunas filas tienen un conductor sin cuenta en Flotas todavía — sus datos se guardan en "Notas" de la unidad, sin vincularlo.</Aviso>
+            <Aviso>Algunas filas tienen un conductor sin cuenta en Flotas todavía — sus datos se guardan en la unidad y quedan precargados: se vinculan solos en cuanto esa persona entre por primera vez con ese correo.</Aviso>
           )}
           {filas.some((f) => f._conductorConflicto) && (
             <Aviso tono="warning">Algunas filas tienen un conductor que ya trae otra unidad asignada — no se vincula de nuevo, para no quitársela.</Aviso>
@@ -249,7 +258,8 @@ export default function CargaMasiva() {
                 { key: 'conductor', header: 'Conductor', render: (f) => (
                     f._persona ? <Badge color="var(--good)">{f.conductor_nombre} — vinculado</Badge>
                     : f._conductorConflicto ? <Badge color="var(--serious)">{f.conductor_nombre} — ya tiene unidad</Badge>
-                    : f._conductorSinCuenta ? <Badge color="var(--text-muted)">{f.conductor_nombre} — sin cuenta</Badge>
+                    : f._conductorSinCuenta ? <Badge color="var(--text-muted)">{f.conductor_nombre} — precargado</Badge>
+                    : f.conductor_nombre ? <Badge color="var(--text-muted)">{f.conductor_nombre}</Badge>
                     : '—'
                   ) },
                 { key: 'estatus', header: '', nowrap: true, render: (f) =>

@@ -9,15 +9,32 @@ const ROLES = { admin: 'Administrador General', director: 'Director', gerente: '
 export default function UsuariosFlotas() {
   const { flotaPerfil } = useFlotaPerfil();
   const [usuarios, setUsuarios] = useState(null);
+  const [precargas, setPrecargas] = useState(null);
   const [error, setError] = useState(null);
+  const [errorPrecarga, setErrorPrecarga] = useState(null);
   const [cambiando, setCambiando] = useState(null);
+  const [quitando, setQuitando] = useState(null);
 
   async function cargar() {
-    const { data, error: err } = await supabase.rpc('flota_listar_usuarios');
-    if (err) { setError(err.message); return; }
-    setUsuarios(data);
+    const [u, p] = await Promise.all([
+      supabase.rpc('flota_listar_usuarios'),
+      supabase.from('flota_precarga').select('id, correo, nombre, puesto, creado_en, flota_vehiculos(codigo, marca, modelo)').order('creado_en'),
+    ]);
+    if (u.error) { setError(u.error.message); return; }
+    setUsuarios(u.data);
+    if (p.error) { setErrorPrecarga(p.error.message); setPrecargas([]); }
+    else { setErrorPrecarga(null); setPrecargas(p.data); }
   }
   useEffect(() => { cargar(); }, []);
+
+  async function quitarPrecarga(id) {
+    if (!confirm('¿Quitar esta precarga? La unidad no se vinculará sola cuando esa persona entre.')) return;
+    setQuitando(id);
+    const { error: err } = await supabase.from('flota_precarga').delete().eq('id', id);
+    setQuitando(null);
+    if (err) { alert(err.message); return; }
+    cargar();
+  }
 
   const posiblesSupervisores = useMemo(
     () => (usuarios ?? []).filter((u) => ['admin', 'director', 'gerente'].includes(u.rol)),
@@ -99,6 +116,33 @@ export default function UsuariosFlotas() {
           filas={usuarios}
         />
       </Card>
+
+      {errorPrecarga && (
+        <Aviso tono="critical">No se pudo cargar "Pendientes por registrarse": {errorPrecarga}</Aviso>
+      )}
+
+      {precargas?.length > 0 && (
+        <Card title="Pendientes por registrarse"
+              subtitle="Ya tienen su unidad y datos cargados. En cuanto entren al portal con este correo, se vinculan solos.">
+          <Tabla
+            columnas={[
+              { key: 'nombre', header: 'Nombre', render: (u) => u.nombre ?? '—' },
+              { key: 'correo', header: 'Correo' },
+              { key: 'unidad', header: 'Unidad', render: (u) => u.flota_vehiculos
+                  ? [u.flota_vehiculos.codigo, u.flota_vehiculos.marca, u.flota_vehiculos.modelo].filter(Boolean).join(' · ')
+                  : '—' },
+              { key: 'puesto', header: 'Puesto', render: (u) => u.puesto ?? '—' },
+              { key: 'acciones', header: '', nowrap: true, render: (u) => (
+                  <button onClick={() => quitarPrecarga(u.id)} disabled={quitando === u.id}
+                          className="text-xs underline" style={{ color: 'var(--critical)' }}>
+                    {quitando === u.id ? 'Quitando…' : 'Quitar'}
+                  </button>
+                ) },
+            ]}
+            filas={precargas}
+          />
+        </Card>
+      )}
     </div>
   );
 }

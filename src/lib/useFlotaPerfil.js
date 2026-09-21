@@ -31,19 +31,20 @@ export function useFlotaPerfil() {
         return;
       }
 
-      if (data) {
+      // Si ya tenia unidad asignada no hace falta volver a llamar al
+      // servidor; si no, damos de alta (o intentamos vincular con una
+      // precarga pendiente por su correo) en un solo viaje.
+      if (data?.vehiculo_asignado_id) {
         setFlotaPerfil(data);
       } else {
-        const { data: nuevo, error: errInsert } = await supabase.from('flota_perfiles')
-          .insert({ perfil_id: uid })
-          .select('perfil_id, rol, vehiculo_asignado_id, supervisor_id').maybeSingle();
+        const { data: nuevo, error: errAlta } = await supabase.rpc('flota_alta_perfil').maybeSingle();
         if (!vivo) return;
-        if (errInsert) {
-          setError(errInsert.message);
+        if (errAlta) {
+          setError(errAlta.message);
           setCargando(false);
           return;
         }
-        setFlotaPerfil(nuevo ?? { perfil_id: uid, rol: 'pendiente', vehiculo_asignado_id: null });
+        setFlotaPerfil(nuevo ?? data ?? { perfil_id: uid, rol: 'pendiente', vehiculo_asignado_id: null });
       }
       setCargando(false);
     })();
