@@ -530,6 +530,7 @@ export default function UnidadDetalle() {
                   </Badge>
                   <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                     {fechaCorta(b.creado_en?.slice(0, 10))} {new Date(b.creado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                    {' · '}{personaById[b.hecho_por]?.nombre ?? 'Administrador General'}
                   </span>
                 </div>
                 {b.accion === 'edicion' ? (
