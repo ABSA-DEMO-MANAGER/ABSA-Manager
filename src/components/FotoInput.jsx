@@ -42,10 +42,25 @@ export function FotoInput({ value, onChange, className = '' }) {
  */
 export function FotoOPdfInput({ value, onChange, className = '' }) {
   const [abierta, setAbierta] = useState(false);
+  const [error, setError] = useState(null);
   const esPdf = value && value.type === 'application/pdf';
+
+  function elegirPdf(archivo) {
+    // El "accept" del input solo es una sugerencia -- el explorador de
+    // archivos del sistema deja cambiar a "Todos los archivos" y elegir
+    // cualquier cosa. Aqui se valida de verdad el contenido del archivo.
+    const esRealmentePdf = archivo.type === 'application/pdf' || archivo.name.toLowerCase().endsWith('.pdf');
+    if (!esRealmentePdf) {
+      setError('Ese archivo no es un PDF. Si es una foto, usa "Tomar foto" con la cámara.');
+      return;
+    }
+    setError(null);
+    onChange(archivo);
+  }
 
   return (
     <div className={className}>
+      {error && <p className="mb-2 text-xs" style={{ color: 'var(--critical)' }}>{error}</p>}
       {value ? (
         <div className="flex items-center gap-3">
           {esPdf ? (
@@ -68,7 +83,7 @@ export function FotoOPdfInput({ value, onChange, className = '' }) {
           <label className="cursor-pointer text-xs underline" style={{ color: 'var(--series-1)' }}>
             Subir PDF
             <input type="file" accept="application/pdf,.pdf" className="hidden"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) onChange(f); e.target.value = ''; }} />
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) elegirPdf(f); e.target.value = ''; }} />
           </label>
         </div>
       )}
