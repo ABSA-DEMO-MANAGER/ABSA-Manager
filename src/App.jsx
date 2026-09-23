@@ -14,6 +14,7 @@ import Usuarios from './pages/Usuarios';
 import Proveedores from './pages/Proveedores';
 import FlotasLayout from './pages/flotas/FlotasLayout';
 import InicioFlotas from './pages/flotas/InicioFlotas';
+import MiUnidad from './pages/flotas/MiUnidad';
 import UnidadDetalle from './pages/flotas/UnidadDetalle';
 import UsuariosFlotas from './pages/flotas/UsuariosFlotas';
 import Tickets from './pages/flotas/Tickets';
@@ -55,6 +56,7 @@ function Rutas() {
 
       <Route path="/flotas" element={<FlotasLayout />}>
         <Route index element={<InicioFlotas />} />
+        <Route path="mi-unidad" element={<MiUnidad />} />
         <Route path="unidades/:id" element={<UnidadDetalle />} />
         <Route path="usuarios" element={<UsuariosFlotas />} />
         <Route path="tickets" element={<Tickets />} />

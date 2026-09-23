@@ -240,12 +240,15 @@ export default function UnidadDetalle() {
         if (ePerfil) throw ePerfil;
 
         const unidad = [d.vehiculo.marca, d.vehiculo.modelo].filter(Boolean).join(' ') || 'una unidad';
-        setAvisoCorreo({
+        const liga = `${window.location.origin}/flotas/mi-unidad`;
+        const aviso = {
           correo: personaNueva.email,
           nombre: personaNueva.nombre,
           asunto: `Se te asignó la unidad ${unidad}`,
-          cuerpo: `Estimado ${personaNueva.nombre}, se te ha asignado la unidad ${unidad}, por favor ingresa a la plataforma para aceptar la solicitud y llenar la información solicitada.`,
-        });
+          cuerpo: `Estimado ${personaNueva.nombre}, se te ha asignado la unidad ${unidad}, por favor ingresa a la plataforma para aceptar la solicitud y llenar la información solicitada: ${liga}`,
+        };
+        setAvisoCorreo(aviso);
+        window.location.href = `mailto:${aviso.correo}?subject=${encodeURIComponent(aviso.asunto)}&body=${encodeURIComponent(aviso.cuerpo)}`;
       } else {
         // Desasignar: el admin sigue registrando cómo se devolvió la unidad.
         const kmNum = inspKm === '' ? null : Number(inspKm);
@@ -417,10 +420,10 @@ export default function UnidadDetalle() {
 
       {avisoCorreo && (
         <Aviso tono="good">
-          Unidad asignada a {avisoCorreo.nombre}.{' '}
+          Unidad propuesta a {avisoCorreo.nombre} — se abrió tu correo con el aviso listo para enviar.{' '}
           <a href={`mailto:${avisoCorreo.correo}?subject=${encodeURIComponent(avisoCorreo.asunto)}&body=${encodeURIComponent(avisoCorreo.cuerpo)}`}
              className="underline font-medium">
-            Enviarle un correo de aviso
+            ¿No se abrió? Ábrelo aquí
           </a>
           {' · '}
           <button onClick={() => setAvisoCorreo(null)} className="underline" style={{ color: 'var(--text-secondary)' }}>
@@ -899,7 +902,7 @@ export default function UnidadDetalle() {
               <Boton type="submit" disabled={guardando}>
                 {guardando ? 'Guardando…'
                   : modalReasig === 'desasignar' ? 'Confirmar devolución'
-                  : modalReasig === 'asignar' ? 'Proponer unidad' : 'Proponer reasignación'}
+                  : modalReasig === 'asignar' ? 'Proponer y enviar correo' : 'Reasignar y enviar correo'}
               </Boton>
             </div>
           </form>
