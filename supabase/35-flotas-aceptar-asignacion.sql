@@ -55,7 +55,9 @@ create policy "usuario gestiona fotos de su unidad" on flota_vehiculo_fotos
 
 -- flota_alta_perfil() ahora tambien regresa la propuesta pendiente y
 -- los datos de RH del perfil, para que "Mi unidad" pueda mostrarlos.
-create or replace function flota_alta_perfil()
+-- Cambia el tipo de retorno, hay que quitar la version anterior primero.
+drop function if exists flota_alta_perfil();
+create function flota_alta_perfil()
 returns table (
   perfil_id uuid, rol text, vehiculo_asignado_id bigint, vehiculo_propuesto_id bigint, supervisor_id uuid,
   telefono text, licencia text, licencia_vence date, puesto text, departamento text,
@@ -111,6 +113,8 @@ begin
     from flota_perfiles fp where fp.perfil_id = auth.uid();
 end;
 $$;
+
+grant execute on function flota_alta_perfil() to authenticated;
 
 -- La persona que recibe la propuesta la acepta y llena su propia
 -- informacion; solo puede tocar la unidad que se le propuso a ELLA.
