@@ -65,6 +65,7 @@ export default function UnidadDetalle() {
   const [inspKm, setInspKm] = useState('');
   const [fotosNuevas, setFotosNuevas] = useState(fotosVacias());
   const [reasigError, setReasigError] = useState(null);
+  const [avisoCorreo, setAvisoCorreo] = useState(null); // { correo, nombre, asunto, cuerpo } tras asignar
 
   // Actualizar galería sin cambiar de conductor
   const [modalGaleria, setModalGaleria] = useState(false);
@@ -271,6 +272,18 @@ export default function UnidadDetalle() {
       await borrarGaleriaActual();
       await subirFotos(fotosNuevas);
 
+      if (asignaNuevo && personaNueva?.email) {
+        const unidad = [d.vehiculo.marca, d.vehiculo.modelo].filter(Boolean).join(' ') || 'una unidad';
+        setAvisoCorreo({
+          correo: personaNueva.email,
+          nombre: personaNueva.nombre,
+          asunto: `Se te asignó la unidad ${unidad}`,
+          cuerpo: `Estimado ${personaNueva.nombre}, se te ha asignado la unidad ${unidad}, por favor ingresa a la plataforma para aceptar la solicitud y llenar la información solicitada.`,
+        });
+      } else {
+        setAvisoCorreo(null);
+      }
+
       setModalReasig(null);
       cargar();
     } catch (err) {
@@ -404,6 +417,20 @@ export default function UnidadDetalle() {
         <div className="space-y-2">
           {alertas.map((a, i) => <Aviso key={i} tono="critical">{a}</Aviso>)}
         </div>
+      )}
+
+      {avisoCorreo && (
+        <Aviso tono="good">
+          Unidad asignada a {avisoCorreo.nombre}.{' '}
+          <a href={`mailto:${avisoCorreo.correo}?subject=${encodeURIComponent(avisoCorreo.asunto)}&body=${encodeURIComponent(avisoCorreo.cuerpo)}`}
+             className="underline font-medium">
+            Enviarle un correo de aviso
+          </a>
+          {' · '}
+          <button onClick={() => setAvisoCorreo(null)} className="underline" style={{ color: 'var(--text-secondary)' }}>
+            Cerrar
+          </button>
+        </Aviso>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
