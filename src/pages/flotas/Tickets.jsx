@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { subirArchivo } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
+import { FotoInput } from '../../components/FotoInput';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
 import {
   Card, Tabla, Select, Cargando, Aviso, Badge, Boton, Modal, Campo, Input, Textarea,
@@ -383,10 +384,7 @@ export default function Tickets() {
           )}
           {(form.categoria === 'gasolina_viaje' || form.categoria === 'gasolina_extra') && (
             <Campo label="Foto del kilometraje" required hint="Obligatoria — tómala del tablero justo ahora">
-              <input type="file" accept="image/*" capture="environment" required
-                     onChange={(e) => setForm({ ...form, foto: e.target.files?.[0] ?? null })}
-                     className="block w-full text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[var(--series-1)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
-                     style={{ color: 'var(--text-secondary)' }} />
+              <FotoInput value={form.foto} onChange={(f) => setForm({ ...form, foto: f })} />
             </Campo>
           )}
 
@@ -399,10 +397,7 @@ export default function Tickets() {
                 <Input type="number" min="0" step="0.01" value={form.monto_solicitado} required onChange={(e) => setForm({ ...form, monto_solicitado: e.target.value })} />
               </Campo>
               <Campo label="Foto del comprobante" hint="Opcional">
-                <input type="file" accept="image/*" capture="environment"
-                       onChange={(e) => setForm({ ...form, foto: e.target.files?.[0] ?? null })}
-                       className="block w-full text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[var(--series-1)] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white"
-                       style={{ color: 'var(--text-secondary)' }} />
+                <FotoInput value={form.foto} onChange={(f) => setForm({ ...form, foto: f })} />
               </Campo>
             </>
           )}

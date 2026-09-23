@@ -7,9 +7,10 @@ import {
 } from '../lib/format';
 import {
   Card, Tabla, Boton, Campo, Input, Select, Textarea, Modal,
-  Cargando, Aviso, Badge, Stat, FiltroChips, ArchivoInput,
+  Cargando, Aviso, Badge, Stat, FiltroChips,
 } from '../components/ui';
 import SelectorProveedor from '../components/SelectorProveedor';
+import { FotoOPdfInput } from '../components/FotoInput';
 
 const COLOR_ESTATUS = {
   programada: 'var(--series-1)', en_proceso: 'var(--series-3)',
@@ -597,13 +598,13 @@ export default function Plan() {
                        onChange={(e) => setFormFinal({ ...formFinal, factura: e.target.value })} />
               </Campo>
             </div>
-            <Campo label="Comprobante de cotización" required hint="Foto o PDF">
-              <ArchivoInput accept="image/*,.pdf"
-                            onChange={(f) => setFormFinal({ ...formFinal, archivoCotizacion: f })} />
+            <Campo label="Comprobante de cotización" required hint="Foto (con cámara) o PDF">
+              <FotoOPdfInput value={formFinal.archivoCotizacion}
+                             onChange={(f) => setFormFinal({ ...formFinal, archivoCotizacion: f })} />
             </Campo>
-            <Campo label="Comprobante de gasto (factura o recibo)" required hint="Foto o PDF">
-              <ArchivoInput accept="image/*,.pdf"
-                            onChange={(f) => setFormFinal({ ...formFinal, archivoComprobante: f })} />
+            <Campo label="Comprobante de gasto (factura o recibo)" required hint="Foto (con cámara) o PDF">
+              <FotoOPdfInput value={formFinal.archivoComprobante}
+                             onChange={(f) => setFormFinal({ ...formFinal, archivoComprobante: f })} />
             </Campo>
 
             {formError && <Aviso tono="critical">{formError}</Aviso>}

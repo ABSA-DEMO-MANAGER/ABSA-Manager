@@ -3,11 +3,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { subirArchivo, urlFirmada } from '../lib/storage';
 import SelectorProveedor from '../components/SelectorProveedor';
+import { FotoInput } from '../components/FotoInput';
 import { useAuth } from '../lib/auth';
 import { money, fechaCorta, hoyISO, TIPOS, CRITICIDAD, ESTATUS_ORDEN } from '../lib/format';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
-  Boton, ArchivoInput, Card,
+  Boton, Card,
 } from '../components/ui';
 
 const COLOR_ESTATUS = {
@@ -455,8 +456,8 @@ export default function ActivoDetalle() {
              titulo={esAdmin ? 'Editar datos técnicos' : 'Proponer cambio de datos técnicos'}>
         {formEditar && (
           <form onSubmit={guardarEdicion} className="space-y-3">
-            <Campo label="Foto" hint={activo.foto_path ? 'Sube una nueva para reemplazarla' : undefined}>
-              <ArchivoInput accept="image/*" onChange={(f) => setFormEditar({ ...formEditar, foto: f })} />
+            <Campo label="Foto" hint={activo.foto_path ? 'Toma una nueva para reemplazarla' : undefined}>
+              <FotoInput value={formEditar.foto} onChange={(f) => setFormEditar({ ...formEditar, foto: f })} />
             </Campo>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Nombre" required>
