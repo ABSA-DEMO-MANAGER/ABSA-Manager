@@ -3,17 +3,82 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta } from '../../lib/format';
-import { Card, Tabla, Cargando, Aviso, Badge, Stat, Boton } from '../../components/ui';
+import { subirArchivo, borrarArchivo } from '../../lib/storage';
+import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import { Card, Tabla, Cargando, Aviso, Badge, Stat, Boton, Campo, Input } from '../../components/ui';
 
 const ESTATUS_SOLICITUD = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
 const COLOR_SOLICITUD = { pendiente: 'var(--serious)', aprobada: 'var(--good)', rechazada: 'var(--critical)' };
 const mesActual = () => new Date().toISOString().slice(0, 7);
+
+const ACEPTAR_VACIO = { telefono: '', licencia: '', licencia_vence: '', puesto: '', departamento: '', tipo_prestacion: '', km: '' };
 
 export default function MiUnidad() {
   const navigate = useNavigate();
   const { flotaPerfil } = useFlotaPerfil();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
+
+  const [propuesta, setPropuesta] = useState(null);
+  const [aceptarForm, setAceptarForm] = useState(ACEPTAR_VACIO);
+  const [fotosAceptar, setFotosAceptar] = useState(fotosVaciasUnidad());
+  const [aceptando, setAceptando] = useState(false);
+  const [aceptarError, setAceptarError] = useState(null);
+
+  const vehiculoPropuestoId = flotaPerfil?.vehiculo_propuesto_id;
+  useEffect(() => {
+    if (!vehiculoPropuestoId) { setPropuesta(null); return; }
+    (async () => {
+      const { data } = await supabase.from('flota_vehiculos')
+        .select('id, marca, modelo, anio, codigo, placas, km').eq('id', vehiculoPropuestoId).maybeSingle();
+      setPropuesta(data ?? null);
+      setAceptarForm({
+        telefono: flotaPerfil.telefono ?? '', licencia: flotaPerfil.licencia ?? '',
+        licencia_vence: flotaPerfil.licencia_vence ?? '', puesto: flotaPerfil.puesto ?? '',
+        departamento: flotaPerfil.departamento ?? '', tipo_prestacion: flotaPerfil.tipo_prestacion ?? '',
+        km: data?.km ?? '',
+      });
+      setFotosAceptar(fotosVaciasUnidad());
+      setAceptarError(null);
+    })();
+  }, [vehiculoPropuestoId]);
+
+  async function aceptarPropuesta(e) {
+    e.preventDefault();
+    setAceptarError(null);
+    if (cuentaFotosUnidad(fotosAceptar) === 0) {
+      return setAceptarError('Sube al menos una foto del estado actual de la unidad.');
+    }
+    setAceptando(true);
+    try {
+      const { data: actuales } = await supabase.from('flota_vehiculo_fotos')
+        .select('id, archivo_path').eq('vehiculo_id', propuesta.id);
+      for (const f of actuales ?? []) { try { await borrarArchivo(f.archivo_path); } catch { /* ignora */ } }
+      if (actuales?.length) await supabase.from('flota_vehiculo_fotos').delete().in('id', actuales.map((f) => f.id));
+
+      for (const punto of PUNTOS_UNIDAD) {
+        for (const file of fotosAceptar[punto]) {
+          const ruta = await subirArchivo(file, `flota/${propuesta.id}/galeria`);
+          await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: propuesta.id, punto, archivo_path: ruta });
+        }
+      }
+
+      const { error: err } = await supabase.rpc('flota_aceptar_asignacion', {
+        p_telefono: aceptarForm.telefono.trim() || null,
+        p_licencia: aceptarForm.licencia.trim() || null,
+        p_licencia_vence: aceptarForm.licencia_vence || null,
+        p_puesto: aceptarForm.puesto.trim() || null,
+        p_departamento: aceptarForm.departamento.trim() || null,
+        p_tipo_prestacion: aceptarForm.tipo_prestacion.trim() || null,
+        p_km: aceptarForm.km === '' ? null : Number(aceptarForm.km),
+      });
+      if (err) throw err;
+      location.reload();
+    } catch (err) {
+      setAceptarError(err.message || 'No se pudo aceptar la unidad.');
+      setAceptando(false);
+    }
+  }
 
   const vehiculoId = flotaPerfil?.vehiculo_asignado_id;
 
@@ -52,14 +117,61 @@ export default function MiUnidad() {
   if (error) return <Aviso tono="critical">No se pudo cargar tu unidad: {error}</Aviso>;
   if (!d) return <Cargando />;
 
+  const tarjetaPropuesta = propuesta && (
+    <Card title={`Tienes una unidad propuesta: ${[propuesta.marca, propuesta.modelo, propuesta.anio].filter(Boolean).join(' ') || propuesta.codigo}`}
+          subtitle="Acepta y llena tu información para empezar a usarla.">
+      <form onSubmit={aceptarPropuesta} className="space-y-4">
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          {[propuesta.codigo, propuesta.placas].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Campo label="Teléfono">
+            <Input value={aceptarForm.telefono} onChange={(e) => setAceptarForm({ ...aceptarForm, telefono: e.target.value })} />
+          </Campo>
+          <Campo label="Licencia">
+            <Input value={aceptarForm.licencia} onChange={(e) => setAceptarForm({ ...aceptarForm, licencia: e.target.value })} />
+          </Campo>
+          <Campo label="Vence licencia">
+            <Input type="date" value={aceptarForm.licencia_vence} onChange={(e) => setAceptarForm({ ...aceptarForm, licencia_vence: e.target.value })} />
+          </Campo>
+          <Campo label="Puesto">
+            <Input value={aceptarForm.puesto} onChange={(e) => setAceptarForm({ ...aceptarForm, puesto: e.target.value })} />
+          </Campo>
+          <Campo label="Departamento">
+            <Input value={aceptarForm.departamento} onChange={(e) => setAceptarForm({ ...aceptarForm, departamento: e.target.value })} />
+          </Campo>
+          <Campo label="Tipo de prestación">
+            <Input value={aceptarForm.tipo_prestacion} onChange={(e) => setAceptarForm({ ...aceptarForm, tipo_prestacion: e.target.value })} />
+          </Campo>
+          <Campo label="Kilometraje actual">
+            <Input inputMode="numeric" value={aceptarForm.km} onChange={(e) => setAceptarForm({ ...aceptarForm, km: e.target.value })} />
+          </Campo>
+        </div>
+        <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+          <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>Fotos del estado actual de la unidad</div>
+          <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Obligatorio — así queda documentado cómo la recibes.
+          </p>
+          <ChecklistFotos valor={fotosAceptar} onChange={setFotosAceptar} />
+        </div>
+        {aceptarError && <Aviso tono="critical">{aceptarError}</Aviso>}
+        <div className="flex justify-end">
+          <Boton type="submit" disabled={aceptando}>{aceptando ? 'Guardando…' : 'Aceptar unidad'}</Boton>
+        </div>
+      </form>
+    </Card>
+  );
+
   if (d.sinUnidad) {
     return (
       <div className="space-y-5">
         <h1 className="text-xl font-semibold tracking-tight">Mi unidad</h1>
-        <Aviso tono="warning">
-          Todavía no tienes una unidad asignada. Pídele a un administrador de Flotas que te la asigne
-          para poder ver tu información aquí y hacer solicitudes.
-        </Aviso>
+        {tarjetaPropuesta ?? (
+          <Aviso tono="warning">
+            Todavía no tienes una unidad asignada. Pídele a un administrador de Flotas que te la asigne
+            para poder ver tu información aquí y hacer solicitudes.
+          </Aviso>
+        )}
       </div>
     );
   }
@@ -69,6 +181,7 @@ export default function MiUnidad() {
 
   return (
     <div className="space-y-5">
+      {tarjetaPropuesta}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{nombre}</h1>

@@ -5,6 +5,7 @@ import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
 import { subirArchivo, borrarArchivo } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
+import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
   Boton, Card,
@@ -13,15 +14,11 @@ import {
 const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
 
-const PUNTOS = ['Puertas delante', 'Puertas detrás', 'Espejos', 'Interiores'];
-const PUNTOS_TODOS = [...PUNTOS, 'Otras'];
+const PUNTOS_TODOS = PUNTOS_UNIDAD;
 const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
-const conductorVacio = () => ({
-  persona_id: '', telefono: '', licencia: '', licencia_vence: '',
-  puesto: '', departamento: '', supervisor_id: '', tipo_prestacion: '',
-});
-const fotosVacias = () => Object.fromEntries(PUNTOS_TODOS.map((p) => [p, []]));
-const cuentaFotos = (f) => Object.values(f).reduce((a, arr) => a + arr.length, 0);
+const conductorVacio = () => ({ persona_id: '', supervisor_id: '' });
+const fotosVacias = fotosVaciasUnidad;
+const cuentaFotos = cuentaFotosUnidad;
 
 function estatusDoc(vence) {
   if (!vence) return null;
@@ -204,75 +201,44 @@ export default function UnidadDetalle() {
     setReasigError(null);
     const asignaNuevo = modalReasig === 'asignar' || modalReasig === 'reasignar';
 
-    if (cuentaFotos(fotosNuevas) === 0) {
+    if (!asignaNuevo && cuentaFotos(fotosNuevas) === 0) {
       return setReasigError('Sube al menos una foto del estado actual de la unidad.');
     }
     const personaNueva = asignaNuevo ? personaById[conductorForm.persona_id] : null;
     if (asignaNuevo && !personaNueva) {
       return setReasigError('Selecciona el usuario registrado que va a conducir la unidad.');
     }
+    if (asignaNuevo && !personaNueva.email) {
+      return setReasigError('Esta persona no tiene correo registrado — no se le puede proponer la unidad.');
+    }
 
     setGuardando(true);
     try {
-      const kmNum = inspKm === '' ? null : Number(inspKm);
       const vehiculoIdNum = Number(id);
 
-      // persona que trae esta unidad ahorita (si tiene cuenta registrada)
-      const personaSaliente = (d.personas ?? []).find((p) => p.vehiculo_asignado_id === vehiculoIdNum);
-      // si a la persona nueva ya se le habia asignado otra unidad, hay que liberar esa otra
-      const otraUnidadId = personaNueva && personaNueva.vehiculo_asignado_id && personaNueva.vehiculo_asignado_id !== vehiculoIdNum
-        ? personaNueva.vehiculo_asignado_id : null;
-
-      // 1. Actualizar la unidad
-      const patch = asignaNuevo
-        ? {
-            conductor_nombre: personaNueva.nombre,
-            conductor_telefono: conductorForm.telefono.trim() || null,
-            conductor_correo: personaNueva.email || null,
-            conductor_licencia: conductorForm.licencia.trim() || null,
-            licencia_vence: conductorForm.licencia_vence || null,
-            puesto: conductorForm.puesto.trim() || null,
-            departamento: conductorForm.departamento.trim() || null,
-            jefe_directo: conductorForm.supervisor_id ? (personaById[conductorForm.supervisor_id]?.nombre ?? null) : null,
-            tipo_prestacion: conductorForm.tipo_prestacion.trim() || null,
-          }
-        : {
-            conductor_nombre: null, conductor_telefono: null, conductor_correo: null,
-            conductor_licencia: null, licencia_vence: null,
-            puesto: null, departamento: null, jefe_directo: null, tipo_prestacion: null,
-          };
-      if (kmNum !== null) patch.km = kmNum;
-      const { error: eUpd } = await supabase.from('flota_vehiculos').update(patch).eq('id', id);
-      if (eUpd) throw eUpd;
-
-      // 2. Liberar a quien traia esta unidad antes (si es una persona distinta a la nueva)
-      if (personaSaliente && personaSaliente.id !== conductorForm.persona_id) {
-        await supabase.from('flota_perfiles').update({ vehiculo_asignado_id: null }).eq('perfil_id', personaSaliente.id);
-      }
-
-      // 3. Si la persona nueva traia otra unidad, esa otra se queda sin conductor
-      if (otraUnidadId) {
-        await supabase.from('flota_vehiculos').update({
-          conductor_nombre: null, conductor_telefono: null, conductor_correo: null,
-          conductor_licencia: null, licencia_vence: null, puesto: null, departamento: null,
-          jefe_directo: null, tipo_prestacion: null,
-        }).eq('id', otraUnidadId);
-      }
-
-      // 4. Vincular (o soltar) el perfil de la persona nueva a esta unidad y su gerente
       if (asignaNuevo) {
+        // Ya no se asigna de un jalón: se propone la unidad y la
+        // persona la acepta desde "Mi unidad", llenando ella misma
+        // telefono/licencia/puesto/departamento/fotos/kilometraje.
+        const personaSaliente = (d.personas ?? []).find((p) => p.vehiculo_asignado_id === vehiculoIdNum);
+        if (personaSaliente && personaSaliente.id !== conductorForm.persona_id) {
+          await supabase.from('flota_perfiles').update({ vehiculo_asignado_id: null }).eq('perfil_id', personaSaliente.id);
+        }
+        // Si ya habia una propuesta pendiente para alguien mas, se cancela para esa persona
+        if (v.propuesta_perfil_id && v.propuesta_perfil_id !== conductorForm.persona_id) {
+          await supabase.from('flota_perfiles').update({ vehiculo_propuesto_id: null }).eq('perfil_id', v.propuesta_perfil_id);
+        }
+
+        const { error: eProp } = await supabase.from('flota_vehiculos')
+          .update({ propuesta_perfil_id: conductorForm.persona_id }).eq('id', id);
+        if (eProp) throw eProp;
+
         const { error: ePerfil } = await supabase.from('flota_perfiles').update({
-          vehiculo_asignado_id: vehiculoIdNum,
+          vehiculo_propuesto_id: vehiculoIdNum,
           supervisor_id: conductorForm.supervisor_id || null,
         }).eq('perfil_id', conductorForm.persona_id);
         if (ePerfil) throw ePerfil;
-      }
 
-      // 5. La galería nueva reemplaza a la anterior (se borran las fotos pasadas)
-      await borrarGaleriaActual();
-      await subirFotos(fotosNuevas);
-
-      if (asignaNuevo && personaNueva?.email) {
         const unidad = [d.vehiculo.marca, d.vehiculo.modelo].filter(Boolean).join(' ') || 'una unidad';
         setAvisoCorreo({
           correo: personaNueva.email,
@@ -281,6 +247,24 @@ export default function UnidadDetalle() {
           cuerpo: `Estimado ${personaNueva.nombre}, se te ha asignado la unidad ${unidad}, por favor ingresa a la plataforma para aceptar la solicitud y llenar la información solicitada.`,
         });
       } else {
+        // Desasignar: el admin sigue registrando cómo se devolvió la unidad.
+        const kmNum = inspKm === '' ? null : Number(inspKm);
+        const patch = {
+          conductor_nombre: null, conductor_telefono: null, conductor_correo: null,
+          conductor_licencia: null, licencia_vence: null,
+          puesto: null, departamento: null, jefe_directo: null, tipo_prestacion: null,
+        };
+        if (kmNum !== null) patch.km = kmNum;
+        const { error: eUpd } = await supabase.from('flota_vehiculos').update(patch).eq('id', id);
+        if (eUpd) throw eUpd;
+
+        const personaSaliente = (d.personas ?? []).find((p) => p.vehiculo_asignado_id === vehiculoIdNum);
+        if (personaSaliente) {
+          await supabase.from('flota_perfiles').update({ vehiculo_asignado_id: null }).eq('perfil_id', personaSaliente.id);
+        }
+
+        await borrarGaleriaActual();
+        await subirFotos(fotosNuevas);
         setAvisoCorreo(null);
       }
 
@@ -288,6 +272,18 @@ export default function UnidadDetalle() {
       cargar();
     } catch (err) {
       setReasigError(err.message || 'No se pudo completar la operación.');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function cancelarPropuesta() {
+    if (!confirm('¿Cancelar la propuesta pendiente para esta unidad?')) return;
+    setGuardando(true);
+    try {
+      await supabase.from('flota_perfiles').update({ vehiculo_propuesto_id: null }).eq('perfil_id', d.vehiculo.propuesta_perfil_id);
+      await supabase.from('flota_vehiculos').update({ propuesta_perfil_id: null }).eq('id', id);
+      cargar();
     } finally {
       setGuardando(false);
     }
@@ -469,6 +465,18 @@ export default function UnidadDetalle() {
           )
         )}
       >
+        {v.propuesta_perfil_id && (
+          <div className="mb-3 flex items-center justify-between rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--plane)' }}>
+            <span>
+              Propuesta pendiente para <strong>{personaById[v.propuesta_perfil_id]?.nombre ?? 'alguien'}</strong> — esperando que acepte e ingrese sus datos.
+            </span>
+            {esFlotaAdmin && (
+              <button onClick={cancelarPropuesta} disabled={guardando} className="ml-3 shrink-0 text-xs underline" style={{ color: 'var(--critical)' }}>
+                Cancelar
+              </button>
+            )}
+          </div>
+        )}
         {v.conductor_nombre ? (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {[
@@ -804,44 +812,10 @@ export default function UnidadDetalle() {
       >
         {modalReasig && (
           <form onSubmit={ejecutarReasignar} className="space-y-4">
-            {d.galeria?.length > 0 && (
-              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  Cómo se entregó {v.conductor_nombre ? `a ${v.conductor_nombre}` : ''} (galería actual)
-                </div>
-                {PUNTOS_TODOS.map((punto) => {
-                  const fotos = d.galeria.filter((f) => f.punto === punto);
-                  if (fotos.length === 0) return null;
-                  return (
-                    <div key={punto} className="mb-2">
-                      <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>{punto}</div>
-                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                        {fotos.map((f) => (
-                          <div key={f.id} className="aspect-square">
-                            <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
-              <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>
-                {v.conductor_nombre ? 'Fotos nuevas (cómo se devuelve la unidad)' : 'Fotos del estado actual de la unidad'}
-              </div>
-              <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                Obligatorio. Al aceptar, estas reemplazan a la galería anterior (las fotos pasadas se borran).
-              </p>
-              <ChecklistFotos valor={fotosNuevas} onChange={setFotosNuevas} />
-            </div>
-
-            {(modalReasig === 'asignar' || modalReasig === 'reasignar') && (
+            {(modalReasig === 'asignar' || modalReasig === 'reasignar') ? (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Nuevo conductor</div>
-                <Campo label="Usuario registrado" required hint="Solo se puede asignar a alguien con cuenta en Flotas — así puede ver la información de su propia unidad">
+                <Campo label="Usuario registrado" required hint="Solo se puede proponer a alguien con cuenta en Flotas — recibirá un aviso para aceptar y llenar sus datos">
                   <Select value={conductorForm.persona_id} required onChange={(e) => seleccionarPersona(e.target.value)}>
                     <option value="">Selecciona…</option>
                     {personasAsignables.map((p) => (
@@ -852,29 +826,9 @@ export default function UnidadDetalle() {
                 {conductorForm.persona_id && personaById[conductorForm.persona_id]?.vehiculo_asignado_id
                   && personaById[conductorForm.persona_id].vehiculo_asignado_id !== Number(id) && (
                   <p className="mt-2 text-xs" style={{ color: 'var(--serious)' }}>
-                    Esta persona ya tiene otra unidad asignada — se la vamos a quitar de ahí para dársela a esta.
+                    Esta persona ya tiene otra unidad asignada — se la vamos a quitar de ahí si acepta esta.
                   </p>
                 )}
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Campo label="Teléfono">
-                    <Input value={conductorForm.telefono} onChange={(e) => setConductorForm({ ...conductorForm, telefono: e.target.value })} />
-                  </Campo>
-                  <Campo label="Licencia">
-                    <Input value={conductorForm.licencia} onChange={(e) => setConductorForm({ ...conductorForm, licencia: e.target.value })} />
-                  </Campo>
-                  <Campo label="Vence licencia">
-                    <Input type="date" value={conductorForm.licencia_vence} onChange={(e) => setConductorForm({ ...conductorForm, licencia_vence: e.target.value })} />
-                  </Campo>
-                  <Campo label="Puesto">
-                    <Input value={conductorForm.puesto} onChange={(e) => setConductorForm({ ...conductorForm, puesto: e.target.value })} />
-                  </Campo>
-                  <Campo label="Departamento">
-                    <Input value={conductorForm.departamento} onChange={(e) => setConductorForm({ ...conductorForm, departamento: e.target.value })} />
-                  </Campo>
-                  <Campo label="Tipo de prestación">
-                    <Input value={conductorForm.tipo_prestacion} onChange={(e) => setConductorForm({ ...conductorForm, tipo_prestacion: e.target.value })} />
-                  </Campo>
-                </div>
                 <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                   <Campo label="Gerente" hint="Define su equipo — de aquí sale también su Director, si el gerente ya tiene uno asignado">
                     <Select value={conductorForm.supervisor_id} onChange={(e) => setConductorForm({ ...conductorForm, supervisor_id: e.target.value })}>
@@ -890,14 +844,54 @@ export default function UnidadDetalle() {
                     </p>
                   )}
                 </div>
+                <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Teléfono, licencia, puesto, departamento, tipo de prestación, kilometraje y fotos del estado
+                  los llena esa persona al aceptar, desde "Mi unidad".
+                </p>
               </div>
-            )}
+            ) : (
+              <>
+                {d.galeria?.length > 0 && (
+                  <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                    <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      Cómo se entregó {v.conductor_nombre ? `a ${v.conductor_nombre}` : ''} (galería actual)
+                    </div>
+                    {PUNTOS_TODOS.map((punto) => {
+                      const fotos = d.galeria.filter((f) => f.punto === punto);
+                      if (fotos.length === 0) return null;
+                      return (
+                        <div key={punto} className="mb-2">
+                          <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>{punto}</div>
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                            {fotos.map((f) => (
+                              <div key={f.id} className="aspect-square">
+                                <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Kilometraje actual">
-                <Input inputMode="numeric" value={inspKm} onChange={(e) => setInspKm(e.target.value)} />
-              </Campo>
-            </div>
+                <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                  <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>
+                    Fotos nuevas (cómo se devuelve la unidad)
+                  </div>
+                  <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Obligatorio. Al confirmar, estas reemplazan a la galería anterior (las fotos pasadas se borran).
+                  </p>
+                  <ChecklistFotos valor={fotosNuevas} onChange={setFotosNuevas} />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Campo label="Kilometraje actual">
+                    <Input inputMode="numeric" value={inspKm} onChange={(e) => setInspKm(e.target.value)} />
+                  </Campo>
+                </div>
+              </>
+            )}
 
             {reasigError && <Aviso tono="critical">{reasigError}</Aviso>}
             <div className="flex justify-end gap-2 pt-1">
@@ -905,7 +899,7 @@ export default function UnidadDetalle() {
               <Boton type="submit" disabled={guardando}>
                 {guardando ? 'Guardando…'
                   : modalReasig === 'desasignar' ? 'Confirmar devolución'
-                  : modalReasig === 'asignar' ? 'Asignar' : 'Reasignar'}
+                  : modalReasig === 'asignar' ? 'Proponer unidad' : 'Proponer reasignación'}
               </Boton>
             </div>
           </form>
@@ -926,46 +920,6 @@ export default function UnidadDetalle() {
           </div>
         </form>
       </Modal>
-    </div>
-  );
-}
-
-function ChecklistFotos({ valor, onChange }) {
-  function agregar(punto, fileList) {
-    const nuevos = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
-    if (!nuevos.length) return;
-    onChange({ ...valor, [punto]: [...valor[punto], ...nuevos] });
-  }
-  function quitar(punto, i) {
-    onChange({ ...valor, [punto]: valor[punto].filter((_, idx) => idx !== i) });
-  }
-  return (
-    <div className="space-y-3">
-      {PUNTOS_TODOS.map((punto) => (
-        <div key={punto}>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</span>
-            <label className="cursor-pointer text-xs underline" style={{ color: 'var(--series-1)' }}>
-              + Fotos
-              <input type="file" accept="image/*" capture="environment" multiple className="hidden"
-                     onChange={(e) => { agregar(punto, e.target.files); e.target.value = ''; }} />
-            </label>
-          </div>
-          {valor[punto].length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {valor[punto].map((file, i) => (
-                <div key={i} className="relative">
-                  <img src={URL.createObjectURL(file)} alt="" className="h-14 w-14 rounded-lg border object-cover"
-                       style={{ borderColor: 'var(--border)' }} />
-                  <button type="button" onClick={() => quitar(punto, i)}
-                          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] text-white"
-                          style={{ background: 'var(--critical)' }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   );
 }

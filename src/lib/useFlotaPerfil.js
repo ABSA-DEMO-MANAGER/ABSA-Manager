@@ -20,7 +20,7 @@ export function useFlotaPerfil() {
     (async () => {
       const uid = sesion.user.id;
       const { data, error: errSelect } = await supabase.from('flota_perfiles')
-        .select('perfil_id, rol, vehiculo_asignado_id, supervisor_id')
+        .select('perfil_id, rol, vehiculo_asignado_id, vehiculo_propuesto_id, supervisor_id, telefono, licencia, licencia_vence, puesto, departamento, jefe_directo, tipo_prestacion')
         .eq('perfil_id', uid).maybeSingle();
 
       if (!vivo) return;
