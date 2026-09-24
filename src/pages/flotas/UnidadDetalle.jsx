@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
-import { subirArchivo, borrarArchivo } from '../../lib/storage';
+import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
 import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import { FotoOPdfInput } from '../../components/FotoInput';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
   Boton, Card,
@@ -39,7 +40,7 @@ const TIPOS_DOCUMENTO = [
   'Póliza de seguro', 'Checklist de usuario', 'Factura de compra',
   'Documentación de arrendamiento', 'Refrendos', 'Tarjetas de circulación',
 ];
-const DOC_VACIO = { tipo: '', tipoOtro: '', referencia: '', emision: '', vence: '', monto: '' };
+const DOC_VACIO = { tipo: '', tipoOtro: '', referencia: '', emision: '', vence: '', monto: '', archivo: null };
 
 const SERV_VACIO = {
   fecha: hoyISO(), tipo: 'preventivo', concepto: '', taller: '', km: '',
@@ -83,7 +84,7 @@ export default function UnidadDetalle() {
     const [v, s, docs, servs, hist, insp, bit, per] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
-      supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto').eq('vehiculo_id', id).order('vence'),
+      supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto, archivo_path').eq('vehiculo_id', id).order('vence'),
       supabase.from('flota_servicios')
         .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones')
         .eq('vehiculo_id', id).order('fecha', { ascending: false }),
@@ -329,23 +330,37 @@ export default function UnidadDetalle() {
     const tipo = formDoc.tipo === '__otro__' ? formDoc.tipoOtro.trim() : formDoc.tipo;
     if (!tipo) return setFormError('Selecciona o escribe el tipo de documento.');
     setGuardando(true);
-    const { error: err } = await supabase.from('flota_documentos').insert({
-      vehiculo_id: Number(id),
-      tipo,
-      referencia: formDoc.referencia.trim() || null,
-      emision: formDoc.emision || null,
-      vence: formDoc.vence || null,
-      monto: formDoc.monto === '' ? null : Number(formDoc.monto),
-    });
-    setGuardando(false);
-    if (err) return setFormError(err.message);
-    setModalDoc(false); cargar();
+    try {
+      let archivo_path = null;
+      if (formDoc.archivo) archivo_path = await subirArchivo(formDoc.archivo, `flota/${id}/documentos`);
+      const { error: err } = await supabase.from('flota_documentos').insert({
+        vehiculo_id: Number(id),
+        tipo,
+        referencia: formDoc.referencia.trim() || null,
+        emision: formDoc.emision || null,
+        vence: formDoc.vence || null,
+        monto: formDoc.monto === '' ? null : Number(formDoc.monto),
+        archivo_path,
+      });
+      if (err) throw err;
+      setModalDoc(false); cargar();
+    } catch (err) {
+      setFormError(err.message || 'No se pudo guardar el documento.');
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  async function borrarDoc(docId) {
+  async function borrarDoc(doc) {
     if (!confirm('¿Borrar este documento?')) return;
-    await supabase.from('flota_documentos').delete().eq('id', docId);
+    if (doc.archivo_path) { try { await borrarArchivo(doc.archivo_path); } catch { /* ignora */ } }
+    await supabase.from('flota_documentos').delete().eq('id', doc.id);
     cargar();
+  }
+
+  async function verDoc(path) {
+    const url = await urlFirmada(path);
+    if (url) window.open(url, '_blank');
   }
 
   function abrirServicio() {
@@ -611,8 +626,15 @@ export default function UnidadDetalle() {
                     return e ? <Badge color={e.color}>{e.label}</Badge> : '—';
                   } },
                 { key: 'monto', header: 'Monto', align: 'right', render: (doc) => doc.monto ? money(doc.monto) : '—' },
+                { key: 'archivo', header: '', nowrap: true, render: (doc) => (
+                    doc.archivo_path ? (
+                      <button onClick={() => verDoc(doc.archivo_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                        Ver archivo
+                      </button>
+                    ) : <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Sin archivo</span>
+                  ) },
                 ...(esFlotaAdmin ? [{ key: 'accion', header: '', nowrap: true, render: (doc) => (
-                    <button onClick={() => borrarDoc(doc.id)} className="text-xs underline" style={{ color: 'var(--critical)' }}>
+                    <button onClick={() => borrarDoc(doc)} className="text-xs underline" style={{ color: 'var(--critical)' }}>
                       Borrar
                     </button>) }] : []),
               ]}
@@ -756,9 +778,12 @@ export default function UnidadDetalle() {
           <Campo label="Monto" hint="Opcional">
             <Input inputMode="decimal" value={formDoc.monto} onChange={(e) => setFormDoc({ ...formDoc, monto: e.target.value })} />
           </Campo>
+          <Campo label="Archivo" hint="Foto (con cámara) o PDF">
+            <FotoOPdfInput value={formDoc.archivo} onChange={(f) => setFormDoc({ ...formDoc, archivo: f })} />
+          </Campo>
           {formError && <Aviso tono="critical">{formError}</Aviso>}
           <div className="flex justify-end gap-2 pt-1">
-            <Boton type="button" variant="ghost" onClick={() => setModalDoc(false)}>Cancelar</Boton>
+            <Boton type="button" variant="ghost" disabled={guardando} onClick={() => setModalDoc(false)}>Cancelar</Boton>
             <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Agregar'}</Boton>
           </div>
         </form>
