@@ -182,9 +182,9 @@ export default function CargaMasiva() {
       const docs = [
         f.verificacion_vence && { tipo: 'Verificación vehicular', vence: f.verificacion_vence },
         f.seguro_vence && { tipo: 'Póliza de seguro', vence: f.seguro_vence },
-        f.tenencia_vence && { tipo: 'Refrendo / tenencia', vence: f.tenencia_vence },
-        f.circulacion_vence && { tipo: 'Tarjeta de circulación', vence: f.circulacion_vence },
-        f.contrato_fin && { tipo: 'Contrato de arrendamiento', vence: f.contrato_fin, referencia: f.arrendadora },
+        f.tenencia_vence && { tipo: 'Refrendos', vence: f.tenencia_vence },
+        f.circulacion_vence && { tipo: 'Tarjetas de circulación', vence: f.circulacion_vence },
+        f.contrato_fin && { tipo: 'Documentación de arrendamiento', vence: f.contrato_fin, referencia: f.arrendadora },
       ].filter(Boolean);
       if (docs.length) {
         await supabase.from('flota_documentos').insert(docs.map((d) => ({ vehiculo_id: nuevo.id, ...d })));

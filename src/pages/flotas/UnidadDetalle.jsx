@@ -35,7 +35,11 @@ const FORM_VACIO = {
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
-const DOC_VACIO = { tipo: '', referencia: '', emision: '', vence: '', monto: '' };
+const TIPOS_DOCUMENTO = [
+  'Póliza de seguro', 'Checklist de usuario', 'Factura de compra',
+  'Documentación de arrendamiento', 'Refrendos', 'Tarjetas de circulación',
+];
+const DOC_VACIO = { tipo: '', tipoOtro: '', referencia: '', emision: '', vence: '', monto: '' };
 
 const SERV_VACIO = {
   fecha: hoyISO(), tipo: 'preventivo', concepto: '', taller: '', km: '',
@@ -322,11 +326,12 @@ export default function UnidadDetalle() {
   async function guardarDoc(e) {
     e.preventDefault();
     setFormError(null);
-    if (!formDoc.tipo.trim()) return setFormError('Escribe el tipo de documento.');
+    const tipo = formDoc.tipo === '__otro__' ? formDoc.tipoOtro.trim() : formDoc.tipo;
+    if (!tipo) return setFormError('Selecciona o escribe el tipo de documento.');
     setGuardando(true);
     const { error: err } = await supabase.from('flota_documentos').insert({
       vehiculo_id: Number(id),
-      tipo: formDoc.tipo.trim(),
+      tipo,
       referencia: formDoc.referencia.trim() || null,
       emision: formDoc.emision || null,
       vence: formDoc.vence || null,
@@ -725,9 +730,18 @@ export default function UnidadDetalle() {
       {/* ---------------- Agregar documento ---------------- */}
       <Modal abierto={modalDoc} onClose={() => setModalDoc(false)} titulo="Agregar documento">
         <form onSubmit={guardarDoc} className="space-y-3">
-          <Campo label="Tipo" required hint="Ej. Póliza de seguro, Verificación vehicular, Tarjeta de circulación">
-            <Input value={formDoc.tipo} required onChange={(e) => setFormDoc({ ...formDoc, tipo: e.target.value })} />
+          <Campo label="Tipo" required>
+            <Select value={formDoc.tipo} required onChange={(e) => setFormDoc({ ...formDoc, tipo: e.target.value })}>
+              <option value="">Selecciona…</option>
+              {TIPOS_DOCUMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
+              <option value="__otro__">Otro…</option>
+            </Select>
           </Campo>
+          {formDoc.tipo === '__otro__' && (
+            <Campo label="¿Cuál?">
+              <Input value={formDoc.tipoOtro} required onChange={(e) => setFormDoc({ ...formDoc, tipoOtro: e.target.value })} />
+            </Campo>
+          )}
           <Campo label="Referencia / folio">
             <Input value={formDoc.referencia} onChange={(e) => setFormDoc({ ...formDoc, referencia: e.target.value })} />
           </Campo>
