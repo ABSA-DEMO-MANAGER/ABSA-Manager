@@ -1,23 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
-import { subirArchivo } from '../../lib/storage';
+import { subirArchivo, urlFirmada } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
-import { FotoInput } from '../../components/FotoInput';
+import { FotoInput, FotoOPdfInput } from '../../components/FotoInput';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
+import {
+  CATEGORIAS_TICKET as CATEGORIAS, ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
+  categoriaTicketDe as categoriaDe, combinarTicketsYSolicitudes,
+} from '../../lib/ticketsFlotas';
 import {
   Card, Tabla, Select, Cargando, Aviso, Badge, Boton, Modal, Campo, Input, Textarea,
 } from '../../components/ui';
 
-const CATEGORIAS = {
-  mantenimiento: 'Mantenimiento', cambio_pieza: 'Cambio de pieza', compra_pieza: 'Compra de pieza',
-  reparacion: 'Reparación', siniestro: 'Siniestro / multa', otro: 'Otro',
-  gasolina_viaje: 'Gasolina — viaje', gasolina_extra: 'Gasolina — carga extra', tag: 'Tag / caseta',
-};
-const ESTATUS_TICKET = { abierto: 'Abierto', en_proceso: 'En proceso', rechazado: 'Rechazado', completado: 'Completado' };
-const COLOR_TICKET = { abierto: 'var(--series-1)', en_proceso: 'var(--serious)', rechazado: 'var(--critical)', completado: 'var(--good)' };
-const ESTATUS_SOLICITUD = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
-const COLOR_SOLICITUD = { pendiente: 'var(--serious)', aprobada: 'var(--good)', rechazada: 'var(--critical)' };
 const GRUPO_LABEL = { pendiente: 'Pendientes', resuelto: 'Resueltos', rechazado: 'Rechazados' };
 const KM_POR_DIA = 5;
 
@@ -49,11 +44,6 @@ function grupoEstatus(row) {
   if (row.estatus === 'rechazada') return 'rechazado';
   return 'pendiente';
 }
-function categoriaDe(row) {
-  if (row._origen === 'ticket') return CATEGORIAS[row.categoria] ?? row.categoria;
-  return CATEGORIAS[row.motivo === 'viaje' ? 'gasolina_viaje' : row.motivo === 'extra' ? 'gasolina_extra' : 'tag'];
-}
-
 function mailtoDecision({ sol, decision, motivoRechazo, vehLabel, personaById, ciudadById }) {
   const persona = personaById[sol.solicitante_id];
   const supervisor = persona?.supervisor_id ? personaById[persona.supervisor_id] : null;
@@ -91,15 +81,16 @@ export default function Tickets() {
   const [detalle, setDetalle] = useState(null);
   const [estatusEdit, setEstatusEdit] = useState('');
   const [motivoEdit, setMotivoEdit] = useState('');
+  const [archivoCierre, setArchivoCierre] = useState(null);
   const [correoHref, setCorreoHref] = useState(null);
 
   async function cargar() {
     const [t, s, v, per, ciu, dist, precio] = await Promise.all([
       supabase.from('flota_tickets')
-        .select('id, folio, vehiculo_id, categoria, descripcion, estatus, motivo_rechazo, solicitado_por, creado_en')
+        .select('id, folio, vehiculo_id, categoria, descripcion, estatus, motivo_rechazo, kilometraje, archivo_cierre_path, resuelto_por, resuelto_en, solicitado_por, creado_en')
         .order('creado_en', { ascending: false }),
       supabase.from('flota_gasolina_solicitudes').select('*').order('creado_en', { ascending: false }),
-      supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas, rendimiento_km_l').order('codigo'),
+      supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas, rendimiento_km_l, km').order('codigo'),
       supabase.rpc('flota_listar_usuarios'),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_distancias').select('id, ciudad_a_id, ciudad_b_id, km'),
@@ -119,12 +110,7 @@ export default function Tickets() {
   const ciudadById = useMemo(() => Object.fromEntries((d?.ciudades ?? []).map((c) => [c.id, c])), [d]);
   const nombreVeh = (v) => v ? [v.codigo, [v.marca, v.modelo].filter(Boolean).join(' ')].filter(Boolean).join(' — ') : '—';
 
-  const filas = useMemo(() => {
-    if (!d) return [];
-    const tix = d.tickets.map((t) => ({ ...t, _origen: 'ticket' }));
-    const sol = d.solicitudes.map((s) => ({ ...s, _origen: 'solicitud' }));
-    return [...tix, ...sol].sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
-  }, [d]);
+  const filas = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
 
   const filtrados = useMemo(() => filas.filter((f) => !fGrupo || grupoEstatus(f) === fGrupo), [filas, fGrupo]);
 
@@ -195,6 +181,7 @@ export default function Tickets() {
         const { error: err } = await supabase.from('flota_tickets').insert({
           vehiculo_id: Number(form.vehiculo_id), categoria: form.categoria,
           descripcion: form.descripcion.trim(), solicitado_por: flotaPerfil.perfil_id,
+          kilometraje: form.kilometraje ? Number(form.kilometraje) : null,
         });
         if (err) throw err;
       }
@@ -207,7 +194,7 @@ export default function Tickets() {
   }
 
   function abrirDetalle(row) {
-    setDetalle(row); setCorreoHref(null);
+    setDetalle(row); setCorreoHref(null); setArchivoCierre(null);
     if (row._origen === 'ticket') {
       setEstatusEdit(row.estatus);
       setMotivoEdit(row.motivo_rechazo ?? '');
@@ -216,15 +203,32 @@ export default function Tickets() {
     }
   }
 
+  // Si la unidad reporta un km mayor al que ya tiene, lo actualiza
+  // (nunca lo regresa para atrás por un dato viejo o mal capturado).
+  async function actualizarKmSiAplica(vehiculoId, kmReportado) {
+    if (!kmReportado) return;
+    const actual = Number(vehById[vehiculoId]?.km ?? 0);
+    if (Number(kmReportado) > actual) {
+      await supabase.from('flota_vehiculos').update({ km: Number(kmReportado) }).eq('id', vehiculoId);
+    }
+  }
+
   async function guardarEstatusTicket() {
     if (estatusEdit === 'rechazado' && !motivoEdit.trim()) {
       alert('Escribe el motivo de rechazo.');
       return;
     }
-    const { error: err } = await supabase.from('flota_tickets')
-      .update({ estatus: estatusEdit, motivo_rechazo: estatusEdit === 'rechazado' ? motivoEdit.trim() : null })
-      .eq('id', detalle.id);
+    let archivo_cierre_path = detalle.archivo_cierre_path ?? null;
+    if (archivoCierre) archivo_cierre_path = await subirArchivo(archivoCierre, `flota/${detalle.vehiculo_id}/tickets`);
+
+    const cierra = ['completado', 'rechazado'].includes(estatusEdit) && detalle.estatus !== estatusEdit;
+    const { error: err } = await supabase.from('flota_tickets').update({
+      estatus: estatusEdit, motivo_rechazo: estatusEdit === 'rechazado' ? motivoEdit.trim() : null,
+      archivo_cierre_path,
+      ...(cierra ? { resuelto_por: flotaPerfil.perfil_id, resuelto_en: new Date().toISOString() } : {}),
+    }).eq('id', detalle.id);
     if (err) { alert(err.message); return; }
+    if (estatusEdit === 'completado') await actualizarKmSiAplica(detalle.vehiculo_id, detalle.kilometraje);
     setDetalle(null); cargar();
   }
 
@@ -233,18 +237,28 @@ export default function Tickets() {
       alert('Escribe el motivo de rechazo.');
       return;
     }
+    let archivo_cierre_path = detalle.archivo_cierre_path ?? null;
+    if (archivoCierre) archivo_cierre_path = await subirArchivo(archivoCierre, `flota/${detalle.vehiculo_id}/gasolina`);
+
     const { error: err } = await supabase.from('flota_gasolina_solicitudes').update({
       estatus: decision, motivo_rechazo: decision === 'rechazada' ? motivoEdit.trim() : null,
+      archivo_cierre_path,
       resuelto_por: flotaPerfil.perfil_id, resuelto_en: new Date().toISOString(),
     }).eq('id', detalle.id);
     if (err) { alert(err.message); return; }
-    const actualizado = { ...detalle, estatus: decision, motivo_rechazo: motivoEdit.trim() || null };
+    if (decision === 'aprobada') await actualizarKmSiAplica(detalle.vehiculo_id, detalle.kilometraje);
+    const actualizado = { ...detalle, estatus: decision, motivo_rechazo: motivoEdit.trim() || null, archivo_cierre_path };
     setDetalle(actualizado);
     setCorreoHref(mailtoDecision({
       sol: actualizado, decision, motivoRechazo: motivoEdit.trim(),
       vehLabel: nombreVeh(vehById[detalle.vehiculo_id]), personaById, ciudadById,
     }));
     cargar();
+  }
+
+  async function verArchivoCierre(path) {
+    const url = await urlFirmada(path);
+    if (url) window.open(url, '_blank');
   }
 
   if (error) return <Aviso tono="critical">No se pudieron cargar los tickets: {error}</Aviso>;
@@ -403,10 +417,15 @@ export default function Tickets() {
           )}
 
           {!['gasolina_viaje', 'gasolina_extra', 'tag'].includes(form.categoria) && (
-            <Campo label="Descripción" required hint="Describe qué necesitas o qué pasó">
-              <Textarea rows={4} value={form.descripcion} required
-                        onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
-            </Campo>
+            <>
+              <Campo label="Descripción" required hint="Describe qué necesitas o qué pasó">
+                <Textarea rows={4} value={form.descripcion} required
+                          onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+              </Campo>
+              <Campo label="Kilometraje actual" hint="Opcional — si lo das, se actualiza en la unidad al completar el ticket">
+                <Input type="number" min="0" step="1" value={form.kilometraje} onChange={(e) => setForm({ ...form, kilometraje: e.target.value })} />
+              </Campo>
+            </>
           )}
 
           {formError && <Aviso tono="critical">{formError}</Aviso>}
@@ -438,8 +457,16 @@ export default function Tickets() {
               <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Descripción</div>
               <div className="rounded-lg border p-3 text-sm" style={{ borderColor: 'var(--border)' }}>{detalle.descripcion}</div>
             </div>
+            {detalle.kilometraje && (
+              <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Kilometraje reportado</div><div className="text-sm">{detalle.kilometraje}</div></div>
+            )}
             {detalle.estatus === 'rechazado' && detalle.motivo_rechazo && (
               <Aviso tono="critical"><strong>Motivo de rechazo:</strong> {detalle.motivo_rechazo}</Aviso>
+            )}
+            {detalle.archivo_cierre_path && (
+              <button type="button" onClick={() => verArchivoCierre(detalle.archivo_cierre_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                Ver archivo de cierre
+              </button>
             )}
 
             {esFlotaAdmin && (
@@ -453,6 +480,11 @@ export default function Tickets() {
                 {estatusEdit === 'rechazado' && (
                   <Campo label="Motivo de rechazo" required>
                     <Textarea rows={2} value={motivoEdit} onChange={(e) => setMotivoEdit(e.target.value)} />
+                  </Campo>
+                )}
+                {['completado', 'rechazado'].includes(estatusEdit) && (
+                  <Campo label="Archivo de cierre" hint="Opcional — evidencia de que se resolvió">
+                    <FotoOPdfInput value={archivoCierre} onChange={setArchivoCierre} />
                   </Campo>
                 )}
               </div>
@@ -508,6 +540,11 @@ export default function Tickets() {
             {detalle.estatus === 'rechazada' && detalle.motivo_rechazo && (
               <Aviso tono="critical"><strong>Motivo de rechazo:</strong> {detalle.motivo_rechazo}</Aviso>
             )}
+            {detalle.archivo_cierre_path && (
+              <button type="button" onClick={() => verArchivoCierre(detalle.archivo_cierre_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                Ver archivo de cierre
+              </button>
+            )}
 
             {esFlotaAdmin && detalle.motivo === 'viaje' && cuadre && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
@@ -535,6 +572,9 @@ export default function Tickets() {
               <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                 <Campo label="Motivo de rechazo" hint="Solo si vas a rechazar">
                   <Textarea rows={2} value={motivoEdit} onChange={(e) => setMotivoEdit(e.target.value)} />
+                </Campo>
+                <Campo label="Archivo de cierre" hint="Opcional — evidencia de que se resolvió">
+                  <FotoOPdfInput value={archivoCierre} onChange={setArchivoCierre} />
                 </Campo>
                 <div className="flex justify-end gap-2">
                   <Boton variant="danger" onClick={() => resolverSolicitud('rechazada')}>Rechazar</Boton>

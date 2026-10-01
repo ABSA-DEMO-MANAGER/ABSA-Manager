@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta } from '../../lib/format';
-import { subirArchivo, borrarArchivo } from '../../lib/storage';
+import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
 import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import {
+  ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
+  categoriaTicketDe, combinarTicketsYSolicitudes,
+} from '../../lib/ticketsFlotas';
 import { Card, Tabla, Cargando, Aviso, Badge, Stat, Boton, Campo, Input } from '../../components/ui';
 
-const ESTATUS_SOLICITUD = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
-const COLOR_SOLICITUD = { pendiente: 'var(--serious)', aprobada: 'var(--good)', rechazada: 'var(--critical)' };
 const mesActual = () => new Date().toISOString().slice(0, 7);
 
 const ACEPTAR_VACIO = { telefono: '', licencia: '', licencia_vence: '', puesto: '', departamento: '', tipo_prestacion: '', km: '' };
@@ -84,7 +86,7 @@ export default function MiUnidad() {
 
   async function cargar() {
     if (!vehiculoId) { setD({ sinUnidad: true }); return; }
-    const [v, gastos, sol, serv, sin] = await Promise.all([
+    const [v, gastos, sol, serv, sin, tix, docs] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', vehiculoId).maybeSingle(),
       supabase.from('flota_gastos')
         .select('categoria, monto, litros, mes, estatus, origen')
@@ -98,10 +100,19 @@ export default function MiUnidad() {
       supabase.from('flota_siniestros')
         .select('id, folio, tipo, clasificacion, fecha, estatus, monto')
         .eq('vehiculo_id', vehiculoId).order('creado_en', { ascending: false }).limit(10),
+      supabase.from('flota_tickets')
+        .select('id, folio, categoria, estatus, creado_en')
+        .eq('vehiculo_id', vehiculoId).order('creado_en', { ascending: false }),
+      supabase.from('flota_documentos')
+        .select('id, tipo, referencia, vence, monto, archivo_path')
+        .eq('vehiculo_id', vehiculoId).order('vence'),
     ]);
-    const err = v.error || gastos.error || sol.error || serv.error || sin.error;
+    const err = v.error || gastos.error || sol.error || serv.error || sin.error || tix.error || docs.error;
     if (err) { setError(err.message); return; }
-    setD({ vehiculo: v.data, gastos: gastos.data, solicitudes: sol.data, servicios: serv.data, siniestros: sin.data });
+    setD({
+      vehiculo: v.data, gastos: gastos.data, solicitudes: sol.data, servicios: serv.data, siniestros: sin.data,
+      tickets: tix.data, documentos: docs.data,
+    });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [vehiculoId]);
 
@@ -113,6 +124,12 @@ export default function MiUnidad() {
     });
     return o;
   }, [d]);
+  const historialTickets = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
+
+  async function verDoc(path) {
+    const url = await urlFirmada(path);
+    if (url) window.open(url, '_blank');
+  }
 
   if (error) return <Aviso tono="critical">No se pudo cargar tu unidad: {error}</Aviso>;
   if (!d) return <Cargando />;
@@ -201,23 +218,46 @@ export default function MiUnidad() {
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Cargas de gasolina y tags</h2>
+          <h2 className="text-base font-semibold tracking-tight">Historial de tickets</h2>
           <button onClick={() => navigate('/flotas/tickets')} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
-            Solicitar
+            Nuevo / ver todos
           </button>
         </div>
         <Card className="!p-0">
           <div className="p-4 sm:p-5">
             <Tabla
-              vacio="Sin solicitudes de gasolina o tags todavía."
+              vacio="Sin tickets ni solicitudes todavía."
               columnas={[
-                { key: 'folio', header: 'Folio', nowrap: true, render: (s) => <span className="tnum">{s.folio}</span> },
-                { key: 'motivo', header: 'Motivo', nowrap: true, render: (s) => s.motivo === 'viaje' ? 'Viaje' : s.motivo === 'extra' ? 'Carga extra' : 'Tag' },
-                { key: 'monto', header: 'Monto', align: 'right', render: (s) => money(s.motivo === 'tag' ? s.monto_solicitado : s.monto_estimado) },
-                { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta(s.creado_en?.slice(0, 10)) },
-                { key: 'estatus', header: 'Estatus', nowrap: true, render: (s) => <Badge color={COLOR_SOLICITUD[s.estatus]}>{ESTATUS_SOLICITUD[s.estatus]}</Badge> },
+                { key: 'folio', header: 'Folio', nowrap: true, render: (t) => <span className="tnum">{t.folio}</span> },
+                { key: 'categoria', header: 'Categoría', nowrap: true, render: categoriaTicketDe },
+                { key: 'fecha', header: 'Fecha', nowrap: true, render: (t) => fechaCorta(t.creado_en?.slice(0, 10)) },
+                { key: 'estatus', header: 'Estatus', nowrap: true, render: (t) => t._origen === 'ticket'
+                    ? <Badge color={COLOR_TICKET[t.estatus]}>{ESTATUS_TICKET[t.estatus]}</Badge>
+                    : <Badge color={COLOR_SOLICITUD[t.estatus]}>{ESTATUS_SOLICITUD[t.estatus]}</Badge> },
               ]}
-              filas={d.solicitudes}
+              filas={historialTickets}
+            />
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-base font-semibold tracking-tight">Documentos</h2>
+        <Card className="!p-0">
+          <div className="p-4 sm:p-5">
+            <Tabla
+              vacio="Sin documentos registrados."
+              columnas={[
+                { key: 'tipo', header: 'Tipo', render: (doc) => doc.tipo },
+                { key: 'referencia', header: 'Referencia', render: (doc) => doc.referencia ?? '—' },
+                { key: 'vence', header: 'Vence', nowrap: true, render: (doc) => doc.vence ? fechaCorta(doc.vence) : '—' },
+                { key: 'archivo', header: '', nowrap: true, render: (doc) => (
+                    doc.archivo_path
+                      ? <button onClick={() => verDoc(doc.archivo_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>Ver archivo</button>
+                      : <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Sin archivo</span>
+                  ) },
+              ]}
+              filas={d.documentos}
             />
           </div>
         </Card>

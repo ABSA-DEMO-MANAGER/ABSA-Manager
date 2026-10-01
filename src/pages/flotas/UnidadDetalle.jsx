@@ -8,6 +8,10 @@ import FotoFirmada from '../../components/FotoFirmada';
 import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import { FotoOPdfInput } from '../../components/FotoInput';
 import {
+  ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
+  categoriaTicketDe, combinarTicketsYSolicitudes,
+} from '../../lib/ticketsFlotas';
+import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
   Boton, Card,
 } from '../../components/ui';
@@ -81,7 +85,7 @@ export default function UnidadDetalle() {
   const [formServ, setFormServ] = useState(SERV_VACIO);
 
   async function cargar() {
-    const [v, s, docs, servs, hist, insp, bit, per] = await Promise.all([
+    const [v, s, docs, servs, hist, insp, bit, per, tix, sol] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', id).maybeSingle(),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto, archivo_path').eq('vehiculo_id', id).order('vence'),
@@ -98,13 +102,20 @@ export default function UnidadDetalle() {
         .select('id, accion, antes, despues, hecho_por, creado_en')
         .eq('vehiculo_id', id).order('creado_en', { ascending: false }).limit(30),
       supabase.rpc('flota_listar_usuarios'),
+      supabase.from('flota_tickets')
+        .select('id, folio, categoria, estatus, creado_en')
+        .eq('vehiculo_id', id).order('creado_en', { ascending: false }),
+      supabase.from('flota_gasolina_solicitudes')
+        .select('id, folio, motivo, estatus, creado_en')
+        .eq('vehiculo_id', id).order('creado_en', { ascending: false }),
     ]);
-    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error || per.error;
+    const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error || per.error || tix.error || sol.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
     setD({
       vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
       historialConductores: hist.data, galeria: insp.data, bitacora: bit.data, personas: per.data ?? [],
+      tickets: tix.data, solicitudes: sol.data,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
@@ -116,6 +127,7 @@ export default function UnidadDetalle() {
     () => (d?.personas ?? []).filter((p) => ['admin', 'director', 'gerente'].includes(p.rol)),
     [d],
   );
+  const historialTickets = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
 
   const alertas = useMemo(() => {
     if (!d) return [];
@@ -639,6 +651,29 @@ export default function UnidadDetalle() {
                     </button>) }] : []),
               ]}
               filas={d.documentos}
+            />
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-base font-semibold tracking-tight">Historial de tickets</h2>
+          <Link to="/flotas/tickets" className="text-xs underline" style={{ color: 'var(--series-1)' }}>Ver todos</Link>
+        </div>
+        <Card className="!p-0">
+          <div className="p-4 sm:p-5">
+            <Tabla
+              vacio="Sin tickets ni solicitudes para esta unidad."
+              columnas={[
+                { key: 'folio', header: 'Folio', nowrap: true, render: (t) => <span className="tnum">{t.folio}</span> },
+                { key: 'categoria', header: 'Categoría', nowrap: true, render: categoriaTicketDe },
+                { key: 'creado_en', header: 'Fecha', nowrap: true, render: (t) => fechaCorta(t.creado_en?.slice(0, 10)) },
+                { key: 'estatus', header: 'Estatus', nowrap: true, render: (t) => t._origen === 'ticket'
+                    ? <Badge color={COLOR_TICKET[t.estatus]}>{ESTATUS_TICKET[t.estatus]}</Badge>
+                    : <Badge color={COLOR_SOLICITUD[t.estatus]}>{ESTATUS_SOLICITUD[t.estatus]}</Badge> },
+              ]}
+              filas={historialTickets}
             />
           </div>
         </Card>

@@ -33,7 +33,7 @@ export default function Unidades() {
   async function cargar() {
     const [v, c, doc] = await Promise.all([
       supabase.from('flota_vehiculos')
-        .select('id, codigo, ciudad_id, marca, modelo, anio, tipo, placas, propiedad, estado, km, conductor_nombre, licencia_vence, proximo_servicio_km, proximo_servicio_fecha')
+        .select('id, codigo, ciudad_id, marca, modelo, anio, tipo, placas, vin, propiedad, estado, km, conductor_nombre, licencia_vence, proximo_servicio_km, proximo_servicio_fecha')
         .order('codigo'),
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('vehiculo_id, vence'),
@@ -71,7 +71,7 @@ export default function Unidades() {
     return d.vehiculos.filter((v) =>
       (!fCiudad || String(v.ciudad_id) === fCiudad) &&
       (!fEstado || v.estado === fEstado) &&
-      (!q || [v.codigo, v.marca, v.modelo, v.placas, v.conductor_nombre].some((x) => x?.toLowerCase().includes(q))));
+      (!q || [v.codigo, v.marca, v.modelo, v.placas, v.vin, v.conductor_nombre].some((x) => x?.toLowerCase().includes(q))));
   }, [d, busca, fCiudad, fEstado]);
 
   function abrirNuevo() {
@@ -136,7 +136,7 @@ export default function Unidades() {
 
       <Card>
         <div className="mb-4 flex flex-wrap gap-2">
-          <Input placeholder="Buscar por código, marca, placas, conductor…" value={busca}
+          <Input placeholder="Buscar por código, marca, placas, serie (VIN), conductor…" value={busca}
                  onChange={(e) => setBusca(e.target.value)} className="w-full min-w-[200px] sm:!w-auto sm:flex-1" />
           <Select value={fCiudad} onChange={(e) => setFCiudad(e.target.value)} className="!w-auto">
             <option value="">Todas las ciudades</option>
