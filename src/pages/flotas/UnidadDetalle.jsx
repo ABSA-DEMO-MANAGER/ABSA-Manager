@@ -40,11 +40,7 @@ const FORM_VACIO = {
   proximo_servicio_km: '', proximo_servicio_fecha: '', notas: '',
 };
 
-const TIPOS_DOCUMENTO = [
-  'Póliza de seguro', 'Checklist de usuario', 'Factura de compra',
-  'Documentación de arrendamiento', 'Refrendos', 'Tarjetas de circulación',
-];
-const DOC_VACIO = { tipo: '', tipoOtro: '', referencia: '', emision: '', vence: '', monto: '', archivo: null };
+const DOC_VACIO = { tipo: '', referencia: '', emision: '', vence: '', monto: '', archivo: null };
 
 const SERV_VACIO = {
   fecha: hoyISO(), tipo: 'preventivo', concepto: '', taller: '', km: '',
@@ -339,8 +335,8 @@ export default function UnidadDetalle() {
   async function guardarDoc(e) {
     e.preventDefault();
     setFormError(null);
-    const tipo = formDoc.tipo === '__otro__' ? formDoc.tipoOtro.trim() : formDoc.tipo;
-    if (!tipo) return setFormError('Selecciona o escribe el tipo de documento.');
+    const tipo = formDoc.tipo.trim();
+    if (!tipo) return setFormError('Escribe el nombre del documento.');
     setGuardando(true);
     try {
       let archivo_path = null;
@@ -630,7 +626,7 @@ export default function UnidadDetalle() {
             <Tabla
               vacio="Sin documentos registrados."
               columnas={[
-                { key: 'tipo', header: 'Tipo', render: (doc) => doc.tipo },
+                { key: 'tipo', header: 'Nombre', render: (doc) => doc.tipo },
                 { key: 'referencia', header: 'Referencia', render: (doc) => doc.referencia ?? '—' },
                 { key: 'vence', header: 'Vence', nowrap: true, render: (doc) => doc.vence ? fechaCorta(doc.vence) : '—' },
                 { key: 'estatus', header: 'Estatus', nowrap: true, render: (doc) => {
@@ -787,18 +783,9 @@ export default function UnidadDetalle() {
       {/* ---------------- Agregar documento ---------------- */}
       <Modal abierto={modalDoc} onClose={() => setModalDoc(false)} titulo="Agregar documento">
         <form onSubmit={guardarDoc} className="space-y-3">
-          <Campo label="Tipo" required>
-            <Select value={formDoc.tipo} required onChange={(e) => setFormDoc({ ...formDoc, tipo: e.target.value })}>
-              <option value="">Selecciona…</option>
-              {TIPOS_DOCUMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
-              <option value="__otro__">Otro…</option>
-            </Select>
+          <Campo label="Nombre" required hint="Ej. Póliza de seguro, Checklist de usuario, Factura de compra…">
+            <Input value={formDoc.tipo} required onChange={(e) => setFormDoc({ ...formDoc, tipo: e.target.value })} />
           </Campo>
-          {formDoc.tipo === '__otro__' && (
-            <Campo label="¿Cuál?">
-              <Input value={formDoc.tipoOtro} required onChange={(e) => setFormDoc({ ...formDoc, tipoOtro: e.target.value })} />
-            </Campo>
-          )}
           <Campo label="Referencia / folio">
             <Input value={formDoc.referencia} onChange={(e) => setFormDoc({ ...formDoc, referencia: e.target.value })} />
           </Campo>

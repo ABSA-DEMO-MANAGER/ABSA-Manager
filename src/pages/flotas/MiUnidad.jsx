@@ -248,7 +248,7 @@ export default function MiUnidad() {
             <Tabla
               vacio="Sin documentos registrados."
               columnas={[
-                { key: 'tipo', header: 'Tipo', render: (doc) => doc.tipo },
+                { key: 'tipo', header: 'Nombre', render: (doc) => doc.tipo },
                 { key: 'referencia', header: 'Referencia', render: (doc) => doc.referencia ?? '—' },
                 { key: 'vence', header: 'Vence', nowrap: true, render: (doc) => doc.vence ? fechaCorta(doc.vence) : '—' },
                 { key: 'archivo', header: '', nowrap: true, render: (doc) => (
