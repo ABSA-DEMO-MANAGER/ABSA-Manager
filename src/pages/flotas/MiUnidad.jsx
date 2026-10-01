@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta } from '../../lib/format';
 import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
-import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import {
   ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
   categoriaTicketDe, combinarTicketsYSolicitudes,
@@ -58,11 +58,9 @@ export default function MiUnidad() {
       for (const f of actuales ?? []) { try { await borrarArchivo(f.archivo_path); } catch { /* ignora */ } }
       if (actuales?.length) await supabase.from('flota_vehiculo_fotos').delete().in('id', actuales.map((f) => f.id));
 
-      for (const punto of PUNTOS_UNIDAD) {
-        for (const file of fotosAceptar[punto]) {
-          const ruta = await subirArchivo(file, `flota/${propuesta.id}/galeria`);
-          await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: propuesta.id, punto, archivo_path: ruta });
-        }
+      for (const file of fotosAceptar) {
+        const ruta = await subirArchivo(file, `flota/${propuesta.id}/galeria`);
+        await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: propuesta.id, punto: 'General', archivo_path: ruta });
       }
 
       const { error: err } = await supabase.rpc('flota_aceptar_asignacion', {

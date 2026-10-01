@@ -5,7 +5,7 @@ import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta, hoyISO } from '../../lib/format';
 import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
-import ChecklistFotos, { PUNTOS_UNIDAD, fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import { FotoOPdfInput } from '../../components/FotoInput';
 import {
   ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
@@ -19,7 +19,6 @@ import {
 const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
 
-const PUNTOS_TODOS = PUNTOS_UNIDAD;
 const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 const conductorVacio = () => ({ persona_id: '', supervisor_id: '' });
 const fotosVacias = fotosVaciasUnidad;
@@ -176,11 +175,9 @@ export default function UnidadDetalle() {
 
   // ---- Galería de fotos del estado de la unidad ----
   async function subirFotos(fotos) {
-    for (const punto of PUNTOS_TODOS) {
-      for (const file of fotos[punto]) {
-        const ruta = await subirArchivo(file, `flota/${id}/galeria`);
-        await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: Number(id), punto, archivo_path: ruta });
-      }
+    for (const file of fotos) {
+      const ruta = await subirArchivo(file, `flota/${id}/galeria`);
+      await supabase.from('flota_vehiculo_fotos').insert({ vehiculo_id: Number(id), punto: 'General', archivo_path: ruta });
     }
   }
 
@@ -536,22 +533,13 @@ export default function UnidadDetalle() {
         )}
       >
         {d.galeria?.length > 0 ? (
-          PUNTOS_TODOS.map((punto) => {
-            const fotos = d.galeria.filter((f) => f.punto === punto);
-            if (fotos.length === 0) return null;
-            return (
-              <div key={punto} className="mb-3">
-                <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{punto}</div>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {fotos.map((f) => (
-                    <div key={f.id} className="aspect-square">
-                      <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
-                    </div>
-                  ))}
-                </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {d.galeria.map((f) => (
+              <div key={f.id} className="aspect-square">
+                <FotoFirmada path={f.archivo_path} alt="" className="block h-full w-full" />
               </div>
-            );
-          })
+            ))}
+          </div>
         ) : (
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             Sin fotos todavía. Se cargan al asignar un conductor.
@@ -920,22 +908,13 @@ export default function UnidadDetalle() {
                     <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                       Cómo se entregó {v.conductor_nombre ? `a ${v.conductor_nombre}` : ''} (galería actual)
                     </div>
-                    {PUNTOS_TODOS.map((punto) => {
-                      const fotos = d.galeria.filter((f) => f.punto === punto);
-                      if (fotos.length === 0) return null;
-                      return (
-                        <div key={punto} className="mb-2">
-                          <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>{punto}</div>
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                            {fotos.map((f) => (
-                              <div key={f.id} className="aspect-square">
-                                <FotoFirmada path={f.archivo_path} alt={punto} className="block h-full w-full" />
-                              </div>
-                            ))}
-                          </div>
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                      {d.galeria.map((f) => (
+                        <div key={f.id} className="aspect-square">
+                          <FotoFirmada path={f.archivo_path} alt="" className="block h-full w-full" />
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
                 )}
 
