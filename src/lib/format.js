@@ -34,6 +34,10 @@ export const fechaCorta = (iso) => {
 
 export const hoyISO = () => new Date().toISOString().slice(0, 10);
 
+/** Minusculas y sin acentos, para buscar sin importar como se escriban ("cesar" encuentra "César"). */
+export const normalizarTexto = (s) =>
+  String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 export const TIPOS = {
   preventivo:   { label: 'Preventivo',    color: 'var(--series-1)' },
   correctivo:   { label: 'Correctivo',    color: 'var(--series-6)' },

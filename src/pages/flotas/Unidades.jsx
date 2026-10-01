@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
-import { fechaCorta, hoyISO } from '../../lib/format';
+import { fechaCorta, hoyISO, normalizarTexto } from '../../lib/format';
 import {
   Card, Tabla, Input, Select, Cargando, Aviso, Badge, Stat, Boton, Modal, Campo, Textarea,
 } from '../../components/ui';
@@ -67,11 +67,11 @@ export default function Unidades() {
 
   const filtrados = useMemo(() => {
     if (!d) return [];
-    const q = busca.trim().toLowerCase();
+    const q = normalizarTexto(busca.trim());
     return d.vehiculos.filter((v) =>
       (!fCiudad || String(v.ciudad_id) === fCiudad) &&
       (!fEstado || v.estado === fEstado) &&
-      (!q || [v.codigo, v.marca, v.modelo, v.placas, v.vin, v.conductor_nombre].some((x) => x?.toLowerCase().includes(q))));
+      (!q || [v.codigo, v.marca, v.modelo, v.placas, v.vin, v.conductor_nombre].some((x) => x && normalizarTexto(x).includes(q))));
   }, [d, busca, fCiudad, fEstado]);
 
   function abrirNuevo() {
