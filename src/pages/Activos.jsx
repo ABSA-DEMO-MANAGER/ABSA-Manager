@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import { fechaCorta, CRITICIDAD } from '../lib/format';
+import { fechaCorta, CRITICIDAD, ESTADO_ACTIVO } from '../lib/format';
 import {
   Card, Tabla, Input, Select, Textarea, Cargando, Aviso, Badge, Stat, FiltroChips,
   Boton, Modal, Campo,
@@ -21,6 +21,7 @@ export default function Activos() {
   const [busca, setBusca] = useState('');
   const [fSuc, setFSuc] = useState('');
   const [fCat, setFCat] = useState('');
+  const [fEstado, setFEstado] = useState('');
   const [vista, setVista] = useState('catalogo'); // catalogo | pendientes
 
   const [modal, setModal] = useState(false);
@@ -31,7 +32,7 @@ export default function Activos() {
   async function cargar() {
     const [a, s, c, cambios, perfiles] = await Promise.all([
       supabase.from('activos')
-        .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, ultimo_servicio, fecha_instalacion, atributos, notas, activo')
+        .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, estado, ultimo_servicio, fecha_instalacion, atributos, notas, activo')
         .order('codigo'),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('categorias').select('id, nombre').order('orden'),
@@ -73,8 +74,9 @@ export default function Activos() {
     return d.activos.filter((a) =>
       (!fSuc || String(a.sucursal_id) === fSuc) &&
       (!fCat || String(a.categoria_id) === fCat) &&
+      (!fEstado || (a.estado ?? 'activo') === fEstado) &&
       coinciden(a, q));
-  }, [d, busca, fSuc, fCat]);
+  }, [d, busca, fSuc, fCat, fEstado]);
 
   function abrirNuevo() {
     setForm(FORM_VACIO);
@@ -189,6 +191,10 @@ export default function Activos() {
                 <option value="">Todas las sucursales</option>
                 {d.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </Select>
+              <Select value={fEstado} onChange={(e) => setFEstado(e.target.value)} className="!w-auto">
+                <option value="">Todos los estados</option>
+                {Object.entries(ESTADO_ACTIVO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </Select>
             </div>
             <FiltroChips opciones={opcionesCategoria} valor={fCat} onChange={setFCat} todasLabel="Todas las categorías" />
           </div>
@@ -213,6 +219,8 @@ export default function Activos() {
               { key: 'capacidad', header: 'Capacidad', nowrap: true, render: (a) => a.capacidad ?? '—' },
               { key: 'criticidad', header: 'Criticidad', nowrap: true,
                 render: (a) => <Badge color={CRITICIDAD[a.criticidad]?.color}>{a.criticidad}</Badge> },
+              { key: 'estado', header: 'Estado', nowrap: true,
+                render: (a) => <Badge color={ESTADO_ACTIVO[a.estado]?.color}>{ESTADO_ACTIVO[a.estado]?.label ?? 'Activo'}</Badge> },
               { key: 'ultimo_servicio', header: 'Último servicio', nowrap: true,
                 render: (a) => fechaCorta(a.ultimo_servicio) },
             ]}

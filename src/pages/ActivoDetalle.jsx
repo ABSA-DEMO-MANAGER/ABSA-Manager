@@ -5,7 +5,7 @@ import { subirArchivo, urlFirmada } from '../lib/storage';
 import SelectorProveedor from '../components/SelectorProveedor';
 import { FotoInput } from '../components/FotoInput';
 import { useAuth } from '../lib/auth';
-import { money, fechaCorta, hoyISO, TIPOS, CRITICIDAD, ESTATUS_ORDEN } from '../lib/format';
+import { money, fechaCorta, hoyISO, TIPOS, CRITICIDAD, ESTADO_ACTIVO, ESTATUS_ORDEN } from '../lib/format';
 import {
   Cargando, Aviso, Badge, Stat, Tabla, Modal, Campo, Input, Select, Textarea,
   Boton, Card,
@@ -43,7 +43,7 @@ export default function ActivoDetalle() {
   async function cargar() {
     const [a, s, c, o, prov, cambios, perfiles] = await Promise.all([
       supabase.from('activos')
-        .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, ultimo_servicio, fecha_instalacion, atributos, notas, foto_path')
+        .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, estado, ultimo_servicio, fecha_instalacion, atributos, notas, foto_path')
         .eq('id', id).maybeSingle(),
       supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
       supabase.from('categorias').select('id, nombre').order('orden'),
@@ -151,7 +151,8 @@ export default function ActivoDetalle() {
       nombre: d.activo.nombre, codigo: d.activo.codigo ?? '', ubicacion: d.activo.ubicacion ?? '',
       tipo: d.activo.tipo ?? '', marca: d.activo.marca ?? '', modelo: d.activo.modelo ?? '',
       serie: d.activo.serie ?? '', capacidad: d.activo.capacidad ?? '',
-      criticidad: d.activo.criticidad, categoria_id: d.activo.categoria_id ? String(d.activo.categoria_id) : '',
+      criticidad: d.activo.criticidad, estado: d.activo.estado ?? 'activo',
+      categoria_id: d.activo.categoria_id ? String(d.activo.categoria_id) : '',
       notas: d.activo.notas ?? '', foto: null,
     });
     setFormError(null); setModalEditar(true);
@@ -179,6 +180,7 @@ export default function ActivoDetalle() {
         serie: formEditar.serie.trim() || null,
         capacidad: formEditar.capacidad.trim() || null,
         criticidad: formEditar.criticidad,
+        estado: formEditar.estado,
         categoria_id: formEditar.categoria_id ? Number(formEditar.categoria_id) : null,
         notas: formEditar.notas.trim() || null,
         foto_path,
@@ -264,6 +266,7 @@ export default function ActivoDetalle() {
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {activo.codigo && <Badge dot={false}>{activo.codigo}</Badge>}
+            <Badge color={ESTADO_ACTIVO[activo.estado]?.color}>{ESTADO_ACTIVO[activo.estado]?.label}</Badge>
             <Badge color={CRITICIDAD[activo.criticidad]?.color}>{CRITICIDAD[activo.criticidad]?.label}</Badge>
             {catById[activo.categoria_id]?.nombre && <Badge dot={false}>{catById[activo.categoria_id].nombre}</Badge>}
           </div>
@@ -502,12 +505,20 @@ export default function ActivoDetalle() {
                        onChange={(e) => setFormEditar({ ...formEditar, capacidad: e.target.value })} />
               </Campo>
             </div>
-            <Campo label="Criticidad">
-              <Select value={formEditar.criticidad}
-                      onChange={(e) => setFormEditar({ ...formEditar, criticidad: e.target.value })}>
-                {Object.entries(CRITICIDAD).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </Select>
-            </Campo>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Criticidad">
+                <Select value={formEditar.criticidad}
+                        onChange={(e) => setFormEditar({ ...formEditar, criticidad: e.target.value })}>
+                  {Object.entries(CRITICIDAD).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </Select>
+              </Campo>
+              <Campo label="Estado" hint="¿Funciona el activo?">
+                <Select value={formEditar.estado}
+                        onChange={(e) => setFormEditar({ ...formEditar, estado: e.target.value })}>
+                  {Object.entries(ESTADO_ACTIVO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </Select>
+              </Campo>
+            </div>
             <Campo label="Notas">
               <Textarea rows={2} value={formEditar.notas}
                         onChange={(e) => setFormEditar({ ...formEditar, notas: e.target.value })} />

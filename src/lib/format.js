@@ -80,6 +80,12 @@ export const CRITICIDAD = {
   C: { label: 'C — menor', color: 'var(--text-muted)' },
 };
 
+export const ESTADO_ACTIVO = {
+  activo:     { label: 'Activo',     color: 'var(--good)' },
+  con_fallas: { label: 'Con fallas', color: 'var(--serious)' },
+  inactivo:   { label: 'Inactivo',   color: 'var(--critical)' },
+};
+
 export const COBERTURA = {
   local: 'Local',
   regional: 'Regional',
