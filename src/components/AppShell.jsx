@@ -12,6 +12,10 @@ export default function AppShell({ appLabel, appIcono, appSub, nav, rolLabel }) 
   const { perfil } = useAuth();
   const [menu, setMenu] = useState(false);
 
+  // `nav` acepta una lista plana de links (como ya usan Flotas/Limpieza)
+  // o una lista de grupos { titulo, items } (Mantenimiento, paso 9).
+  const grupos = nav.length && nav[0].items ? nav : [{ items: nav }];
+
   const linkCls = ({ isActive }) =>
     `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${isActive ? 'font-medium' : ''}`;
   const linkStyle = ({ isActive }) => ({
@@ -58,13 +62,31 @@ export default function AppShell({ appLabel, appIcono, appSub, nav, rolLabel }) 
           </div>
         </div>
 
-        <div className="space-y-0.5">
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={linkCls} style={linkStyle}
-                     onClick={() => setMenu(false)}>
-              <span className="w-4 text-center text-xs" aria-hidden="true">{n.icono}</span>
-              {n.label}
-            </NavLink>
+        <div className="space-y-3">
+          {grupos.map((g, gi) => (
+            <div key={g.titulo ?? gi}>
+              {g.titulo && (
+                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+                     style={{ color: 'var(--text-muted)' }}>
+                  {g.titulo}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {g.items.map((n) => (
+                  <NavLink key={n.to} to={n.to} end={n.end} className={linkCls} style={linkStyle}
+                           onClick={() => setMenu(false)}>
+                    <span className="w-4 text-center text-xs" aria-hidden="true">{n.icono}</span>
+                    <span className="flex-1">{n.label}</span>
+                    {!!n.badge && (
+                      <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ background: 'var(--critical)', color: '#fff' }}>
+                        {n.badge}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
