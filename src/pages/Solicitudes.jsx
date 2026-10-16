@@ -34,8 +34,12 @@ export default function Solicitudes() {
   const [revisando, setRevisando] = useState(false);
   const [revisionError, setRevisionError] = useState(null);
 
+  const [encuestaForm, setEncuestaForm] = useState({ calificacion: 5, comentario: '' });
+  const [enviandoEncuesta, setEnviandoEncuesta] = useState(false);
+  const [encuestaError, setEncuestaError] = useState(null);
+
   async function cargar() {
-    const [s, suc, cat, act, per] = await Promise.all([
+    const [s, suc, cat, act, per, ord, enc] = await Promise.all([
       supabase.from('solicitudes')
         .select('id, folio, sucursal_id, categoria_id, activo_id, ubicacion, descripcion, impacto, personas_afectadas, riesgo, prioridad_sugerida, prioridad_confirmada, estatus, motivo_rechazo, orden_id, solicitado_por, revisado_por, revisado_en, creado_en')
         .order('creado_en', { ascending: false }),
@@ -43,10 +47,15 @@ export default function Solicitudes() {
       supabase.from('categorias').select('id, nombre').order('orden'),
       supabase.from('activos').select('id, sucursal_id, nombre, codigo').order('nombre'),
       supabase.from('perfiles').select('id, nombre'),
+      supabase.from('ordenes').select('id, estatus'),
+      supabase.from('encuestas').select('id, orden_id, calificacion, comentario'),
     ]);
-    const err = s.error || suc.error || cat.error || act.error || per.error;
+    const err = s.error || suc.error || cat.error || act.error || per.error || ord.error || enc.error;
     if (err) { setError(err.message); return; }
-    setD({ solicitudes: s.data, sucursales: suc.data, categorias: cat.data, activos: act.data, personas: per.data });
+    setD({
+      solicitudes: s.data, sucursales: suc.data, categorias: cat.data, activos: act.data, personas: per.data,
+      ordenes: ord.data, encuestas: enc.data,
+    });
   }
   useEffect(() => { cargar(); }, []);
 
@@ -54,6 +63,8 @@ export default function Solicitudes() {
   const catById = useMemo(() => Object.fromEntries((d?.categorias ?? []).map((c) => [c.id, c])), [d]);
   const activoById = useMemo(() => Object.fromEntries((d?.activos ?? []).map((a) => [a.id, a])), [d]);
   const personaById = useMemo(() => Object.fromEntries((d?.personas ?? []).map((p) => [p.id, p])), [d]);
+  const ordenById = useMemo(() => Object.fromEntries((d?.ordenes ?? []).map((o) => [o.id, o])), [d]);
+  const encuestaByOrden = useMemo(() => Object.fromEntries((d?.encuestas ?? []).map((e) => [e.orden_id, e])), [d]);
 
   const filtradas = useMemo(() => {
     if (!d) return [];
@@ -115,8 +126,24 @@ export default function Solicitudes() {
       prioridad_confirmada: s.prioridad_confirmada ?? s.prioridad_sugerida ?? 'P3', motivo: s.motivo_rechazo ?? '',
     });
     setRevisionError(null);
+    setEncuestaForm({ calificacion: 5, comentario: '' });
+    setEncuestaError(null);
     const { data } = await supabase.from('solicitudes_fotos').select('id, archivo_path').eq('solicitud_id', s.id);
     setDetalleFotos(data ?? []);
+  }
+
+  async function enviarEncuesta() {
+    setEncuestaError(null);
+    setEnviandoEncuesta(true);
+    const { error: err } = await supabase.from('encuestas').insert({
+      orden_id: detalle.orden_id,
+      calificacion: Number(encuestaForm.calificacion),
+      comentario: encuestaForm.comentario.trim() || null,
+      creado_por: perfil.id,
+    });
+    setEnviandoEncuesta(false);
+    if (err) { setEncuestaError(err.message); return; }
+    cargar();
   }
 
   async function guardarRevision() {
@@ -316,6 +343,47 @@ export default function Solicitudes() {
               <Aviso tono="critical">{detalle.motivo_rechazo}</Aviso>
             )}
             {detalle.orden_id && <Aviso tono="good">Convertida en la orden #{detalle.orden_id}.</Aviso>}
+
+            {detalle.orden_id && ordenById[detalle.orden_id]?.estatus === 'realizada' && (() => {
+              const encuesta = encuestaByOrden[detalle.orden_id];
+              if (encuesta) {
+                return (
+                  <div className="space-y-1 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                    <div className="text-xs font-medium" style={{ color: 'var(--series-1)' }}>Calificación del cierre</div>
+                    <div>{'★'.repeat(encuesta.calificacion)}{'☆'.repeat(5 - encuesta.calificacion)}</div>
+                    {encuesta.comentario && <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{encuesta.comentario}</div>}
+                  </div>
+                );
+              }
+              if (detalle.solicitado_por !== perfil.id) return null;
+              return (
+                <div className="space-y-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                  <div className="text-xs font-medium" style={{ color: 'var(--series-1)' }}>
+                    Tu solicitud fue atendida — califica el cierre
+                  </div>
+                  <Campo label="Satisfacción">
+                    <Select value={encuestaForm.calificacion}
+                            onChange={(e) => setEncuestaForm({ ...encuestaForm, calificacion: e.target.value })}>
+                      <option value={5}>5 — Muy satisfecho</option>
+                      <option value={4}>4 — Satisfecho</option>
+                      <option value={3}>3 — Neutral</option>
+                      <option value={2}>2 — Insatisfecho</option>
+                      <option value={1}>1 — Muy insatisfecho</option>
+                    </Select>
+                  </Campo>
+                  <Campo label="Comentario" hint="Opcional">
+                    <Textarea rows={2} value={encuestaForm.comentario}
+                              onChange={(e) => setEncuestaForm({ ...encuestaForm, comentario: e.target.value })} />
+                  </Campo>
+                  {encuestaError && <Aviso tono="critical">{encuestaError}</Aviso>}
+                  <div className="flex justify-end">
+                    <Boton disabled={enviandoEncuesta} onClick={enviarEncuesta}>
+                      {enviandoEncuesta ? 'Enviando…' : 'Enviar calificación'}
+                    </Boton>
+                  </div>
+                </div>
+              );
+            })()}
 
             {puedeGestionar && detalle.estatus !== 'convertida' && (
               <div className="space-y-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
