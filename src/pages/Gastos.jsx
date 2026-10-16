@@ -19,6 +19,11 @@ const VACIO = {
   monto: '', proveedor_id: '', factura: '',
 };
 
+// Mismo umbral que en Plan.jsx (paso 5 del rediseño de Mantenimiento):
+// gastos mayores a $500 se gestionan desde Aprobaciones, no se marcan
+// aprobado/pagado/rechazado directo aquí. Hardcodeado hasta el paso 7.
+const UMBRAL_SIN_AUTORIZACION = 500;
+
 // Preventivo/correctivo solo se generan al finalizar una orden en el Plan
 // de mantenimiento (se piden proveedor y comprobantes ahí). Aquí solo se
 // capturan directo los tipos que no nacen de una orden de trabajo.
@@ -94,7 +99,8 @@ export default function Gastos() {
       concepto: form.concepto.trim(),
       tipo: form.tipo,
       unidad_pago: form.unidad_pago,
-      estatus_pago: form.estatus_pago,
+      estatus_pago: monto > UMBRAL_SIN_AUTORIZACION && ['aprobado', 'pagado', 'rechazado'].includes(form.estatus_pago)
+        ? 'a_enviar' : form.estatus_pago,
       cotizaciones: Number(form.cotizaciones) || 0,
       monto,
       proveedor_id: form.proveedor_id ? Number(form.proveedor_id) : null,
@@ -275,10 +281,13 @@ export default function Gastos() {
                 {Object.entries(UNIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </Select>
             </Campo>
-            <Campo label="Estatus de pago">
+            <Campo label="Estatus de pago"
+                   hint={(Number(form.monto) || 0) > UMBRAL_SIN_AUTORIZACION ? `Arriba de $${UMBRAL_SIN_AUTORIZACION} se autoriza desde Aprobaciones` : undefined}>
               <Select value={form.estatus_pago}
                       onChange={(e) => setForm({ ...form, estatus_pago: e.target.value })}>
-                {Object.entries(ESTATUS_PAGO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {Object.entries(ESTATUS_PAGO)
+                  .filter(([k]) => (Number(form.monto) || 0) <= UMBRAL_SIN_AUTORIZACION || !['aprobado', 'pagado', 'rechazado'].includes(k))
+                  .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </Select>
             </Campo>
           </div>

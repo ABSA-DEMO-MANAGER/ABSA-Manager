@@ -4,6 +4,7 @@ import AppShell from './AppShell';
 const NAV = [
   { to: '/mantenimiento',              label: 'Tablero',      icono: '▦', end: true },
   { to: '/mantenimiento/solicitudes',  label: 'Solicitudes',  icono: '✎' },
+  { to: '/mantenimiento/aprobaciones', label: 'Aprobaciones', icono: '✓' },
   { to: '/mantenimiento/sucursales',   label: 'Sucursales',  icono: '⌂' },
   { to: '/mantenimiento/gastos',       label: 'Gastos',      icono: '$' },
   { to: '/mantenimiento/plan',         label: 'Plan',        icono: '☑' },

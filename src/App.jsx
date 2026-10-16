@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Hub from './pages/Hub';
 import Dashboard from './pages/Dashboard';
 import Solicitudes from './pages/Solicitudes';
+import Aprobaciones from './pages/Aprobaciones';
 import Gastos from './pages/Gastos';
 import Plan from './pages/Plan';
 import Activos from './pages/Activos';
@@ -45,6 +46,7 @@ function Rutas() {
       <Route path="/mantenimiento" element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="solicitudes" element={<Solicitudes />} />
+        <Route path="aprobaciones" element={<Aprobaciones />} />
         <Route path="gastos" element={<Gastos />} />
         <Route path="plan" element={<Plan />} />
         <Route path="activos" element={<Activos />} />

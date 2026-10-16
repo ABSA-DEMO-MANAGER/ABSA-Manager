@@ -25,6 +25,10 @@ const TIPOS_ORDEN = ['preventivo', 'correctivo'];
 // documento: "Tres cotizaciones obligatorias arriba de $1,500 con
 // IVA"); se vuelve configurable por el admin en el paso 7.
 const UMBRAL_TRES_COTIZACIONES = 1500;
+// Mismo criterio: gastos de $500 o menos no necesitan autorizacion
+// previa (solo comprobacion); arriba de $500 se gestionan desde
+// Aprobaciones. Tambien hardcodeado hasta el paso 7.
+const UMBRAL_SIN_AUTORIZACION = 500;
 
 const EXCEPCIONES_COTIZACION = {
   emergencia_p1: 'Emergencia P1',
@@ -343,7 +347,9 @@ export default function Plan() {
         concepto: ordenActiva.titulo,
         tipo: ordenActiva.tipo,
         unidad_pago: formFinal.unidad_pago,
-        estatus_pago: formFinal.estatus_pago,
+        // Arriba del umbral, nunca se manda directo a aprobado/pagado aunque
+        // el formulario traiga otra cosa -- tiene que pasar por Aprobaciones.
+        estatus_pago: monto > UMBRAL_SIN_AUTORIZACION ? 'a_enviar' : formFinal.estatus_pago,
         cotizaciones: Number(formFinal.cotizaciones) || 1,
         monto,
         factura: formFinal.factura.trim() || null,
@@ -787,12 +793,20 @@ export default function Plan() {
       {/* ---------------- Finalizar orden: captura el gasto ---------------- */}
       <Modal abierto={!!ordenActiva} onClose={() => !guardando && setOrdenActiva(null)}
              titulo={`Finalizar — ${ordenActiva?.titulo ?? ''}`}>
-        {ordenActiva && (
+        {ordenActiva && (() => {
+          const montoFinalNum = parseFloat(String(formFinal.monto).replace(/[$,\s]/g, '')) || 0;
+          const requiereAutorizacion = montoFinalNum > UMBRAL_SIN_AUTORIZACION;
+          return (
           <form onSubmit={finalizar} className="space-y-3">
             <Aviso>
               Al finalizar se crea el registro de gasto ligado a esta orden y ya no podrá
               capturarse por separado en el módulo de Gastos.
             </Aviso>
+            {requiereAutorizacion && (
+              <Aviso tono="warning">
+                Este gasto supera ${UMBRAL_SIN_AUTORIZACION} — se enviará a Aprobaciones en vez de marcarse pagado.
+              </Aviso>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Campo label="Fecha de realización" required>
                 <Input type="date" value={formFinal.fecha_realizada} required
@@ -823,11 +837,11 @@ export default function Plan() {
               </Campo>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Estatus de pago">
-                <Select value={formFinal.estatus_pago}
+              <Campo label="Estatus de pago" hint={requiereAutorizacion ? 'Arriba del umbral — se envía a Aprobaciones' : undefined}>
+                <Select value={requiereAutorizacion ? 'a_enviar' : formFinal.estatus_pago} disabled={requiereAutorizacion}
                         onChange={(e) => setFormFinal({ ...formFinal, estatus_pago: e.target.value })}>
-                  <option value="pagado">Pagado</option>
-                  <option value="aprobado">Aprobado</option>
+                  {!requiereAutorizacion && <option value="pagado">Pagado</option>}
+                  {!requiereAutorizacion && <option value="aprobado">Aprobado</option>}
                   <option value="a_enviar">A enviar</option>
                 </Select>
               </Campo>
@@ -862,7 +876,8 @@ export default function Plan() {
               <Boton type="submit" disabled={guardando}>{subiendo || (guardando ? 'Guardando…' : 'Finalizar orden')}</Boton>
             </div>
           </form>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );

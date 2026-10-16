@@ -54,10 +54,11 @@ export const UNIDADES = {
 };
 
 export const ESTATUS_PAGO = {
-  borrador: 'Borrador',
-  a_enviar: 'A enviar',
-  aprobado: 'Aprobado',
-  pagado:   'Pagado',
+  borrador:  'Borrador',
+  a_enviar:  'A enviar',
+  aprobado:  'Aprobado',
+  pagado:    'Pagado',
+  rechazado: 'Rechazado',
 };
 
 export const ESTATUS_ORDEN = {
