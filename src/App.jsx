@@ -13,6 +13,7 @@ import ActivoDetalle from './pages/ActivoDetalle';
 import Sucursales from './pages/Sucursales';
 import SucursalDetalle from './pages/SucursalDetalle';
 import Usuarios from './pages/Usuarios';
+import Configuracion from './pages/Configuracion';
 import Proveedores from './pages/Proveedores';
 import FlotasLayout from './pages/flotas/FlotasLayout';
 import InicioFlotas from './pages/flotas/InicioFlotas';
@@ -54,6 +55,7 @@ function Rutas() {
         <Route path="sucursales" element={<Sucursales />} />
         <Route path="sucursales/:id" element={<SucursalDetalle />} />
         <Route path="usuarios" element={<Usuarios />} />
+        <Route path="configuracion" element={<Configuracion />} />
         <Route path="proveedores" element={<Proveedores />} />
         <Route path="*" element={<Dashboard />} />
       </Route>

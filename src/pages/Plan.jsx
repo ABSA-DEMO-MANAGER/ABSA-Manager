@@ -21,14 +21,10 @@ const COLOR_ESTATUS = {
 
 const TIPOS_ORDEN = ['preventivo', 'correctivo'];
 
-// Por ahora hardcodeado (coincide con la decision ya aprobada en el
-// documento: "Tres cotizaciones obligatorias arriba de $1,500 con
-// IVA"); se vuelve configurable por el admin en el paso 7.
-const UMBRAL_TRES_COTIZACIONES = 1500;
-// Mismo criterio: gastos de $500 o menos no necesitan autorizacion
-// previa (solo comprobacion); arriba de $500 se gestionan desde
-// Aprobaciones. Tambien hardcodeado hasta el paso 7.
-const UMBRAL_SIN_AUTORIZACION = 500;
+// Valores por defecto mientras carga mantenimiento_config (paso 7);
+// un admin los edita en Configuración sin tocar código.
+const DEFAULT_UMBRAL_TRES_COTIZACIONES = 1500;
+const DEFAULT_UMBRAL_SIN_AUTORIZACION = 500;
 
 const EXCEPCIONES_COTIZACION = {
   emergencia_p1: 'Emergencia P1',
@@ -86,8 +82,11 @@ export default function Plan() {
   const [cotGuardando, setCotGuardando] = useState(false);
   const [cotError, setCotError] = useState(null);
 
+  const UMBRAL_TRES_COTIZACIONES = d?.config?.monto_tres_cotizaciones ?? DEFAULT_UMBRAL_TRES_COTIZACIONES;
+  const UMBRAL_SIN_AUTORIZACION = d?.config?.monto_sin_autorizacion ?? DEFAULT_UMBRAL_SIN_AUTORIZACION;
+
   async function cargar() {
-    const [o, p, s, c, a, prov, g, ev, cot] = await Promise.all([
+    const [o, p, s, c, a, prov, g, ev, cot, cfg] = await Promise.all([
       supabase.from('ordenes')
         .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor, cotizacion_excepcion, cotizacion_excepcion_motivo')
         .order('fecha_programada', { ascending: true, nullsFirst: false }).limit(2000),
@@ -100,12 +99,14 @@ export default function Plan() {
       supabase.from('ordenes_evidencias').select('id, orden_id, momento, archivo_path'),
       supabase.from('cotizaciones')
         .select('id, orden_id, proveedor_id, monto, iva, total, vigencia, tiempo_entrega, garantia, cumple_alcance, archivo_path, creado_en'),
+      supabase.from('mantenimiento_config').select('monto_sin_autorizacion, monto_tres_cotizaciones').eq('id', 1).single(),
     ]);
     const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error || cot.error;
     if (err) { setError(err.message); return; }
     setD({
       ordenes: o.data, planes: p.data, sucursales: s.data, categorias: c.data,
       activos: a.data, proveedores: prov.data, gastos: g.data, evidencias: ev.data, cotizaciones: cot.data,
+      config: cfg.data,
     });
   }
   useEffect(() => { cargar(); }, []);

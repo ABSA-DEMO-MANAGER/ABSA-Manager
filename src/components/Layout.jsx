@@ -16,7 +16,10 @@ const ROLES = { admin: 'Administrador', usuario: 'Usuario', consulta: 'Consulta'
 
 export default function Layout() {
   const { perfil, esAdmin } = useAuth();
-  const nav = esAdmin ? [...NAV, { to: '/mantenimiento/usuarios', label: 'Usuarios', icono: '☺' }] : NAV;
+  const nav = esAdmin ? [...NAV,
+    { to: '/mantenimiento/usuarios', label: 'Usuarios', icono: '☺' },
+    { to: '/mantenimiento/configuracion', label: 'Configuración', icono: '⚑' },
+  ] : NAV;
 
   return (
     <AppShell

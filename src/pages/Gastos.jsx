@@ -20,10 +20,10 @@ const VACIO = {
   monto: '', proveedor_id: '', factura: '', archivo: null,
 };
 
-// Mismo umbral que en Plan.jsx (paso 5 del rediseño de Mantenimiento):
-// gastos mayores a $500 se gestionan desde Aprobaciones, no se marcan
-// aprobado/pagado/rechazado directo aquí. Hardcodeado hasta el paso 7.
-const UMBRAL_SIN_AUTORIZACION = 500;
+// Valor por defecto mientras carga mantenimiento_config (paso 7); un
+// admin lo edita en Configuración sin tocar código. Mismo umbral que
+// usa Plan.jsx y que exige la policy de gastos en la base de datos.
+const DEFAULT_UMBRAL_SIN_AUTORIZACION = 500;
 
 // Preventivo/correctivo solo se generan al finalizar una orden en el Plan
 // de mantenimiento (se piden proveedor y comprobantes ahí). Aquí solo se
@@ -37,7 +37,10 @@ export default function Gastos() {
   const [gastos, setGastos] = useState(null);
   const [sucursales, setSucursales] = useState([]);
   const [proveedores, setProveedores] = useState([]);
+  const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
+
+  const UMBRAL_SIN_AUTORIZACION = config?.monto_sin_autorizacion ?? DEFAULT_UMBRAL_SIN_AUTORIZACION;
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(VACIO);
@@ -51,15 +54,16 @@ export default function Gastos() {
   const soloRevisar = params.get('revisar') === '1';
 
   async function cargar() {
-    const [g, s, p] = await Promise.all([
+    const [g, s, p, cfg] = await Promise.all([
       supabase.from('gastos')
         .select('id, fecha, sucursal_id, concepto, tipo, unidad_pago, estatus_pago, cotizaciones, monto, factura, requiere_revision, nota_revision, proveedor_id, orden_id, comprobante_cotizacion_path, comprobante_gasto_path, comprobante_path, comprobado_en, creado_en')
         .order('fecha', { ascending: false }).limit(2000),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
+      supabase.from('mantenimiento_config').select('monto_sin_autorizacion').eq('id', 1).single(),
     ]);
     if (g.error || s.error || p.error) { setError((g.error || s.error || p.error).message); return; }
-    setGastos(g.data); setSucursales(s.data); setProveedores(p.data);
+    setGastos(g.data); setSucursales(s.data); setProveedores(p.data); setConfig(cfg.data);
   }
   useEffect(() => { cargar(); }, []);
 
