@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { subirArchivo } from '../lib/storage';
 import { useAuth } from '../lib/auth';
 import {
-  fechaCorta, hoyISO, money, pct, FRECUENCIAS, ESTATUS_ORDEN, TIPOS, CRITICIDAD,
+  fechaCorta, hoyISO, money, pct, FRECUENCIAS, ESTATUS_ORDEN, TIPOS, CRITICIDAD, PRIORIDAD_SOLICITUD,
 } from '../lib/format';
 import {
   Card, Tabla, Boton, Campo, Input, Select, Textarea, Modal,
@@ -11,6 +11,8 @@ import {
 } from '../components/ui';
 import SelectorProveedor from '../components/SelectorProveedor';
 import { FotoOPdfInput } from '../components/FotoInput';
+import FotoFirmada from '../components/FotoFirmada';
+import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../components/ChecklistFotos';
 
 const COLOR_ESTATUS = {
   programada: 'var(--series-1)', en_proceso: 'var(--series-3)',
@@ -24,6 +26,7 @@ const FORM_VACIO = {
   titulo: '', descripcion: '', tipo: 'correctivo', tipo_falla: '', criticidad: 'B', categoria_id: '',
   fecha_programada: hoyISO(), fecha_realizada: '', estatus: 'programada',
   costo_estimado: '', duracion_estimada_horas: '', notas: '',
+  diagnostico: '', alcance: '', fecha_compromiso: '', prioridad: 'P3', requiere_proveedor: false,
 };
 
 const FORM_FINAL_VACIO = {
@@ -50,12 +53,14 @@ export default function Plan() {
 
   const [ordenActiva, setOrdenActiva] = useState(null);
   const [formFinal, setFormFinal] = useState(FORM_FINAL_VACIO);
+  const [fotosDespues, setFotosDespues] = useState(fotosVaciasUnidad());
   const [subiendo, setSubiendo] = useState(null); // texto de progreso
+  const [fotosAntes, setFotosAntes] = useState(fotosVaciasUnidad());
 
   async function cargar() {
-    const [o, p, s, c, a, prov, g] = await Promise.all([
+    const [o, p, s, c, a, prov, g, ev] = await Promise.all([
       supabase.from('ordenes')
-        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas')
+        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor')
         .order('fecha_programada', { ascending: true, nullsFirst: false }).limit(2000),
       supabase.from('planes').select('id, nombre, descripcion, frecuencia, servicio, categoria_id, activo').order('nombre'),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
@@ -63,12 +68,13 @@ export default function Plan() {
       supabase.from('activos').select('id, sucursal_id, nombre, codigo').order('nombre'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
       supabase.from('gastos').select('orden_id, monto').not('orden_id', 'is', null),
+      supabase.from('ordenes_evidencias').select('id, orden_id, momento, archivo_path'),
     ]);
-    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error;
+    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error;
     if (err) { setError(err.message); return; }
     setD({
       ordenes: o.data, planes: p.data, sucursales: s.data, categorias: c.data,
-      activos: a.data, proveedores: prov.data, gastos: g.data,
+      activos: a.data, proveedores: prov.data, gastos: g.data, evidencias: ev.data,
     });
   }
   useEffect(() => { cargar(); }, []);
@@ -148,6 +154,7 @@ export default function Plan() {
       plan_id: plan?.id ?? '', titulo: plan?.nombre ?? '', descripcion: plan?.descripcion ?? '',
       tipo: plan ? 'preventivo' : 'correctivo', categoria_id: plan?.categoria_id ? String(plan.categoria_id) : '',
     });
+    setFotosAntes(fotosVaciasUnidad());
     setFormError(null); setModal(true);
   }
   function abrirEditar(o) {
@@ -159,7 +166,10 @@ export default function Plan() {
       fecha_programada: o.fecha_programada ?? '', fecha_realizada: o.fecha_realizada ?? '',
       estatus: o.estatus, costo_estimado: o.costo_estimado ?? '',
       duracion_estimada_horas: o.duracion_estimada_horas ?? '', notas: o.notas ?? '',
+      diagnostico: o.diagnostico ?? '', alcance: o.alcance ?? '', fecha_compromiso: o.fecha_compromiso ?? '',
+      prioridad: o.prioridad ?? 'P3', requiere_proveedor: o.requiere_proveedor ?? false,
     });
+    setFotosAntes(fotosVaciasUnidad());
     setFormError(null); setModal(true);
   }
 
@@ -186,13 +196,24 @@ export default function Plan() {
       costo_estimado: form.costo_estimado === '' ? null : Number(form.costo_estimado),
       duracion_estimada_horas: form.duracion_estimada_horas === '' ? null : Number(form.duracion_estimada_horas),
       notas: form.notas.trim() || null,
+      diagnostico: form.diagnostico.trim() || null,
+      alcance: form.alcance.trim() || null,
+      fecha_compromiso: form.fecha_compromiso || null,
+      prioridad: form.prioridad || null,
+      requiere_proveedor: form.requiere_proveedor,
     };
     setGuardando(true);
-    const { error: err } = form.id
-      ? await supabase.from('ordenes').update(payload).eq('id', form.id)
-      : await supabase.from('ordenes').insert(payload);
+    const { data: ordenGuardada, error: err } = form.id
+      ? await supabase.from('ordenes').update(payload).eq('id', form.id).select('id').maybeSingle()
+      : await supabase.from('ordenes').insert(payload).select('id').maybeSingle();
+    if (err) { setGuardando(false); return setFormError(err.message); }
+
+    for (const file of fotosAntes) {
+      const ruta = await subirArchivo(file, `ordenes/${ordenGuardada.id}`);
+      await supabase.from('ordenes_evidencias').insert({ orden_id: ordenGuardada.id, momento: 'antes', archivo_path: ruta });
+    }
+
     setGuardando(false);
-    if (err) return setFormError(err.message);
     setModal(false); cargar();
   }
 
@@ -205,6 +226,7 @@ export default function Plan() {
   function abrirFinalizar(o) {
     setOrdenActiva(o);
     setFormFinal({ ...FORM_FINAL_VACIO, proveedor_id: o.proveedor_id ? String(o.proveedor_id) : '' });
+    setFotosDespues(fotosVaciasUnidad());
     setFormError(null);
   }
 
@@ -217,6 +239,7 @@ export default function Plan() {
     if (!formFinal.archivoCotizacion) return setFormError('Sube el comprobante de cotización.');
     if (!formFinal.archivoComprobante) return setFormError('Sube el comprobante de gasto (factura o recibo).');
     if (!formFinal.fecha_realizada) return setFormError('Captura la fecha de realización.');
+    if (cuentaFotosUnidad(fotosDespues) === 0) return setFormError('Sube al menos una foto de evidencia de cómo quedó el trabajo.');
 
     setGuardando(true);
     try {
@@ -224,6 +247,11 @@ export default function Plan() {
       const rutaCot = await subirArchivo(formFinal.archivoCotizacion, `ordenes/${ordenActiva.id}`);
       setSubiendo('Subiendo comprobante de gasto…');
       const rutaComp = await subirArchivo(formFinal.archivoComprobante, `ordenes/${ordenActiva.id}`);
+      setSubiendo('Subiendo evidencia…');
+      for (const file of fotosDespues) {
+        const ruta = await subirArchivo(file, `ordenes/${ordenActiva.id}`);
+        await supabase.from('ordenes_evidencias').insert({ orden_id: ordenActiva.id, momento: 'despues', archivo_path: ruta });
+      }
       setSubiendo('Guardando…');
 
       const { error: errGasto } = await supabase.from('gastos').insert({
@@ -280,6 +308,8 @@ export default function Plan() {
       render: (o) => <Badge color={TIPOS[o.tipo]?.color}>{TIPOS[o.tipo]?.label}</Badge> },
     { key: 'criticidad', header: 'Criticidad', nowrap: true,
       render: (o) => o.criticidad ? <Badge color={CRITICIDAD[o.criticidad]?.color}>{o.criticidad}</Badge> : '—' },
+    { key: 'prioridad', header: 'Prioridad', nowrap: true,
+      render: (o) => o.prioridad ? <Badge color={PRIORIDAD_SOLICITUD[o.prioridad]?.color}>{o.prioridad}</Badge> : '—' },
     { key: 'costo_estimado', header: 'Costo est.', align: 'right', nowrap: true,
       render: (o) => o.costo_estimado ? money(o.costo_estimado) : '—' },
     { key: 'duracion_estimada_horas', header: 'Duración', align: 'right', nowrap: true,
@@ -470,6 +500,14 @@ export default function Plan() {
             <Textarea rows={2} value={form.descripcion}
                       onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
           </Campo>
+          <Campo label="Diagnóstico" hint="Opcional — causa, riesgo e impacto encontrados">
+            <Textarea rows={2} value={form.diagnostico}
+                      onChange={(e) => setForm({ ...form, diagnostico: e.target.value })} />
+          </Campo>
+          <Campo label="Alcance" hint="Opcional — actividades, cantidades y entrega esperada">
+            <Textarea rows={2} value={form.alcance}
+                      onChange={(e) => setForm({ ...form, alcance: e.target.value })} />
+          </Campo>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Sucursal" required>
               <Select value={form.sucursal_id} required
@@ -511,6 +549,17 @@ export default function Plan() {
               <Input type="date" value={form.fecha_programada}
                      onChange={(e) => setForm({ ...form, fecha_programada: e.target.value })} />
             </Campo>
+            <Campo label="Fecha compromiso" hint="Opcional">
+              <Input type="date" value={form.fecha_compromiso}
+                     onChange={(e) => setForm({ ...form, fecha_compromiso: e.target.value })} />
+            </Campo>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Campo label="Prioridad">
+              <Select value={form.prioridad} onChange={(e) => setForm({ ...form, prioridad: e.target.value })}>
+                {Object.entries(PRIORIDAD_SOLICITUD).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </Select>
+            </Campo>
             <Campo label="Estatus">
               <Select value={form.estatus} onChange={(e) => setForm({ ...form, estatus: e.target.value })}>
                 {Object.entries(ESTATUS_ORDEN).filter(([k]) => k !== 'realizada').map(([k, v]) => (
@@ -533,6 +582,29 @@ export default function Plan() {
                                onChange={(v) => setForm({ ...form, proveedor_id: v })}
                                onCreado={agregarProveedor} />
           </Campo>
+          <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={form.requiere_proveedor}
+                   onChange={(e) => setForm({ ...form, requiere_proveedor: e.target.checked })} />
+            Requiere contratación externa (no se puede resolver con el equipo interno)
+          </label>
+          {form.id && (d.evidencias ?? []).some((ev) => ev.orden_id === form.id && ev.momento === 'antes') && (
+            <div>
+              <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>Evidencia "antes" ya guardada</div>
+              <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {d.evidencias.filter((ev) => ev.orden_id === form.id && ev.momento === 'antes').map((ev) => (
+                  <div key={ev.id} className="aspect-square">
+                    <FotoFirmada path={ev.archivo_path} alt="" className="block h-full w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+            <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+              Evidencia "antes" — opcional
+            </div>
+            <ChecklistFotos valor={fotosAntes} onChange={setFotosAntes} />
+          </div>
           <Campo label="Notas">
             <Textarea rows={2} value={form.notas}
                       onChange={(e) => setForm({ ...form, notas: e.target.value })} />
@@ -606,6 +678,15 @@ export default function Plan() {
               <FotoOPdfInput value={formFinal.archivoComprobante}
                              onChange={(f) => setFormFinal({ ...formFinal, archivoComprobante: f })} />
             </Campo>
+            <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+              <div className="mb-2 text-xs font-medium" style={{ color: 'var(--good)' }}>
+                Evidencia "después" — obligatoria
+              </div>
+              <p className="mb-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                Cómo quedó el trabajo terminado.
+              </p>
+              <ChecklistFotos valor={fotosDespues} onChange={setFotosDespues} />
+            </div>
 
             {formError && <Aviso tono="critical">{formError}</Aviso>}
             <div className="flex justify-end gap-2 pt-1">
