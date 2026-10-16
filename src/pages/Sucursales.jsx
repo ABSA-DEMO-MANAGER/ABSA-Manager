@@ -24,7 +24,7 @@ export default function Sucursales() {
     const [s, p, g, a] = await Promise.all([
       supabase.from('sucursales').select('id, codigo, nombre, ciudad, activa').order('codigo'),
       supabase.from('presupuestos').select('sucursal_id, anio, mes, monto_aprobado'),
-      supabase.from('gastos').select('sucursal_id, monto, fecha'),
+      supabase.from('gastos').select('sucursal_id, monto, fecha, unidad_pago, estatus_pago'),
       supabase.from('activos').select('sucursal_id'),
     ]);
     const err = s.error || p.error || g.error || a.error;
@@ -41,7 +41,8 @@ export default function Sucursales() {
     const pres = Object.fromEntries(
       d.presupuestos.filter((p) => p.anio === anioActual && p.mes === mesActual).map((p) => [p.sucursal_id, p]));
     return d.sucursales.map((s) => {
-      const gs = d.gastos.filter((g) => g.sucursal_id === s.id && g.fecha >= desde && g.fecha <= hasta);
+      const gs = d.gastos.filter((g) => g.sucursal_id === s.id && g.fecha >= desde && g.fecha <= hasta &&
+        g.unidad_pago !== 'caja_chica' && ['aprobado', 'pagado'].includes(g.estatus_pago));
       const ejercido = gs.reduce((a, g) => a + Number(g.monto), 0);
       const presupuesto = Number(pres[s.id]?.monto_aprobado ?? 0);
       return {

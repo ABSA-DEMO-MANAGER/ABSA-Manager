@@ -355,6 +355,7 @@ export default function Plan() {
         factura: formFinal.factura.trim() || null,
         comprobante_cotizacion_path: rutaCot,
         comprobante_gasto_path: rutaComp,
+        comprobante_path: rutaComp, comprobado_en: new Date().toISOString(),
       });
       if (errGasto) throw errGasto;
 

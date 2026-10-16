@@ -5,8 +5,9 @@ import { useAuth } from '../lib/auth';
 import {
   money, fechaCorta, hoyISO, TIPOS, UNIDADES, ESTATUS_PAGO,
 } from '../lib/format';
-import { urlFirmada } from '../lib/storage';
+import { urlFirmada, subirArchivo } from '../lib/storage';
 import SelectorProveedor from '../components/SelectorProveedor';
+import { FotoOPdfInput } from '../components/FotoInput';
 import {
   Card, Tabla, Boton, Campo, Input, Select, Textarea, Modal,
   Cargando, Aviso, Badge, Stat,
@@ -16,7 +17,7 @@ import PeriodoFiltro from '../components/PeriodoFiltro';
 const VACIO = {
   fecha: hoyISO(), sucursal_id: '', concepto: '', tipo: 'insumo',
   unidad_pago: 'compania', estatus_pago: 'borrador', cotizaciones: 1,
-  monto: '', proveedor_id: '', factura: '',
+  monto: '', proveedor_id: '', factura: '', archivo: null,
 };
 
 // Mismo umbral que en Plan.jsx (paso 5 del rediseño de Mantenimiento):
@@ -52,7 +53,7 @@ export default function Gastos() {
   async function cargar() {
     const [g, s, p] = await Promise.all([
       supabase.from('gastos')
-        .select('id, fecha, sucursal_id, concepto, tipo, unidad_pago, estatus_pago, cotizaciones, monto, factura, requiere_revision, nota_revision, proveedor_id, orden_id, comprobante_cotizacion_path, comprobante_gasto_path')
+        .select('id, fecha, sucursal_id, concepto, tipo, unidad_pago, estatus_pago, cotizaciones, monto, factura, requiere_revision, nota_revision, proveedor_id, orden_id, comprobante_cotizacion_path, comprobante_gasto_path, comprobante_path, comprobado_en, creado_en')
         .order('fecha', { ascending: false }).limit(2000),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
@@ -93,6 +94,8 @@ export default function Gastos() {
     if (monto < 0) return setFormError('El monto no puede ser negativo. Si es una nota de crédito, regístrala como tal.');
 
     setGuardando(true);
+    let comprobante_path = null;
+    if (form.archivo) comprobante_path = await subirArchivo(form.archivo, 'gastos');
     const { error: err } = await supabase.from('gastos').insert({
       fecha: form.fecha,
       sucursal_id: Number(form.sucursal_id),
@@ -105,6 +108,7 @@ export default function Gastos() {
       monto,
       proveedor_id: form.proveedor_id ? Number(form.proveedor_id) : null,
       factura: form.factura.trim() || null,
+      comprobante_path, comprobado_en: comprobante_path ? new Date().toISOString() : null,
     });
     setGuardando(false);
     if (err) return setFormError(err.message);
@@ -115,6 +119,22 @@ export default function Gastos() {
     await supabase.from('gastos')
       .update({ requiere_revision: false, nota_revision: null })
       .eq('id', g.id);
+    cargar();
+  }
+
+  const [adjuntarFor, setAdjuntarFor] = useState(null);
+  const [archivoAdjuntar, setArchivoAdjuntar] = useState(null);
+  const [adjuntando, setAdjuntando] = useState(false);
+
+  async function guardarAdjunto() {
+    if (!archivoAdjuntar) return;
+    setAdjuntando(true);
+    const ruta = await subirArchivo(archivoAdjuntar, 'gastos');
+    await supabase.from('gastos')
+      .update({ comprobante_path: ruta, comprobado_en: new Date().toISOString() })
+      .eq('id', adjuntarFor.id);
+    setAdjuntando(false);
+    setAdjuntarFor(null); setArchivoAdjuntar(null);
     cargar();
   }
 
@@ -133,7 +153,7 @@ export default function Gastos() {
     { key: 'concepto', header: 'Concepto', render: (g) => (
         <div>
           <div>{g.concepto}</div>
-          {(g.comprobante_cotizacion_path || g.comprobante_gasto_path) && (
+          {(g.comprobante_cotizacion_path || g.comprobante_gasto_path || g.comprobante_path) && (
             <div className="mt-1 flex gap-3 text-xs">
               {g.comprobante_cotizacion_path && (
                 <button onClick={() => verComprobante(g.comprobante_cotizacion_path)}
@@ -147,6 +167,20 @@ export default function Gastos() {
                   Comprobante
                 </button>
               )}
+              {g.comprobante_path && (
+                <button onClick={() => verComprobante(g.comprobante_path)}
+                        className="underline" style={{ color: 'var(--series-1)' }}>
+                  Comprobante
+                </button>
+              )}
+            </div>
+          )}
+          {!g.comprobante_path && g.unidad_pago === 'caja_chica' && (
+            <div className="mt-1">
+              <button onClick={() => { setAdjuntarFor(g); setArchivoAdjuntar(null); }}
+                      className="text-xs underline" style={{ color: 'var(--serious)' }}>
+                Adjuntar comprobante
+              </button>
             </div>
           )}
           {g.requiere_revision && (
@@ -303,6 +337,10 @@ export default function Gastos() {
             </Campo>
           </div>
 
+          <Campo label="Comprobante" hint="Opcional al registrar; si es caja chica debe adjuntarse dentro de 24 horas">
+            <FotoOPdfInput value={form.archivo} onChange={(f) => setForm({ ...form, archivo: f })} />
+          </Campo>
+
           {formError && <Aviso tono="critical">{formError}</Aviso>}
 
           <div className="flex justify-end gap-2 pt-1">
@@ -310,6 +348,24 @@ export default function Gastos() {
             <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
           </div>
         </form>
+      </Modal>
+
+      {/* ---------------- Adjuntar comprobante ---------------- */}
+      <Modal abierto={!!adjuntarFor} onClose={() => setAdjuntarFor(null)} titulo="Adjuntar comprobante">
+        {adjuntarFor && (
+          <div className="space-y-3">
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{adjuntarFor.concepto}</p>
+            <Campo label="Comprobante" required>
+              <FotoOPdfInput value={archivoAdjuntar} onChange={setArchivoAdjuntar} />
+            </Campo>
+            <div className="flex justify-end gap-2 pt-1">
+              <Boton type="button" variant="ghost" onClick={() => setAdjuntarFor(null)}>Cancelar</Boton>
+              <Boton type="button" disabled={!archivoAdjuntar || adjuntando} onClick={guardarAdjunto}>
+                {adjuntando ? 'Guardando…' : 'Guardar'}
+              </Boton>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

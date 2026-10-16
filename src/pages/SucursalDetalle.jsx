@@ -35,7 +35,7 @@ export default function SucursalDetalle() {
       supabase.from('presupuestos')
         .select('id, anio, mes, monto_solicitado, monto_aprobado, notas')
         .eq('sucursal_id', id),
-      supabase.from('gastos').select('monto, fecha').eq('sucursal_id', id),
+      supabase.from('gastos').select('monto, fecha, unidad_pago, estatus_pago').eq('sucursal_id', id),
       supabase.from('activos')
         .select('id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, ultimo_servicio, fecha_instalacion, atributos, notas')
         .eq('sucursal_id', id).order('codigo'),
@@ -60,7 +60,11 @@ export default function SucursalDetalle() {
 
   const stats = useMemo(() => {
     if (!d || !periodo) return null;
-    const enPeriodo = d.gastos.filter((g) => g.fecha >= periodo.desde && g.fecha <= periodo.hasta);
+    // Mismo criterio que el Tablero: caja chica es un fondo aparte, y
+    // solo cuenta lo ya autorizado o pagado (no borrador/a_enviar/rechazado).
+    const enPeriodo = d.gastos.filter((g) =>
+      g.fecha >= periodo.desde && g.fecha <= periodo.hasta &&
+      g.unidad_pago !== 'caja_chica' && ['aprobado', 'pagado'].includes(g.estatus_pago));
     const ejercido = enPeriodo.reduce((a, g) => a + Number(g.monto), 0);
     const presupuesto = presupuestosDelPeriodo.reduce((a, p) => a + Number(p.monto_aprobado ?? 0), 0);
     return {

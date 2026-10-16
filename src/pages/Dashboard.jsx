@@ -72,7 +72,7 @@ export default function Dashboard() {
       supabase.from('presupuestos').select('sucursal_id, anio, mes, monto_aprobado, monto_solicitado'),
       supabase.from('caja_chica').select('id, anio, monto_asignado, notas'),
       supabase.from('gastos')
-        .select('id, fecha, sucursal_id, tipo, unidad_pago, monto, requiere_revision, orden_id, proveedor_id, concepto')
+        .select('id, fecha, sucursal_id, tipo, unidad_pago, estatus_pago, monto, requiere_revision, orden_id, proveedor_id, concepto, creado_en, comprobante_path')
         .order('fecha', { ascending: false }),
       supabase.from('ordenes')
         .select('id, sucursal_id, activo_id, tipo, criticidad, estatus, fecha_programada, fecha_realizada, costo_estimado, titulo, proveedor_id'),
@@ -98,8 +98,13 @@ export default function Dashboard() {
     const hoy = hoyISO();
 
     const enPeriodo = gastos.filter((g) => g.fecha >= desde && g.fecha <= hasta);
-    const dePresupuesto = enPeriodo.filter((g) => g.unidad_pago !== 'caja_chica');
-    const deCajaChica = enPeriodo.filter((g) => g.unidad_pago === 'caja_chica');
+    // Solo cuenta contra el presupuesto lo ya autorizado o pagado -- un
+    // gasto en borrador/a_enviar todavia no es un compromiso real, y uno
+    // rechazado nunca lo fue (antes SI se contaban los tres, lo cual
+    // inflaba "ejercido" con dinero que nunca se gasto).
+    const comprometidoOGastado = (g) => ['aprobado', 'pagado'].includes(g.estatus_pago);
+    const dePresupuesto = enPeriodo.filter((g) => g.unidad_pago !== 'caja_chica' && comprometidoOGastado(g));
+    const deCajaChica = enPeriodo.filter((g) => g.unidad_pago === 'caja_chica' && comprometidoOGastado(g));
 
     // presupuesto: suma los meses cuyo rango se cruza con el periodo elegido
     const presupuestoPorSucursal = {};
@@ -189,6 +194,16 @@ export default function Dashboard() {
     };
   }, [datos, periodo]);
 
+  // Gastos de caja chica sin comprobante con mas de 24 horas de
+  // registrados -- bloquean la reposicion (independiente del periodo
+  // elegido en el filtro, por eso usa datos.gastos y no `m`).
+  const vencidasCajaChica = useMemo(() => {
+    if (!datos) return [];
+    const limite = Date.now() - 24 * 60 * 60 * 1000;
+    return datos.gastos.filter((g) =>
+      g.unidad_pago === 'caja_chica' && !g.comprobante_path && new Date(g.creado_en).getTime() < limite);
+  }, [datos]);
+
   const top10Realizados = useMemo(() => {
     if (!m) return [];
     return [...m.realizados].sort((a, b) => ordenarRealizados === 'criticidad'
@@ -223,6 +238,13 @@ export default function Dashboard() {
     setFormError(null);
     const monto = Number(editCaja.monto);
     if (isNaN(monto) || monto < 0) return setFormError('Captura un monto válido.');
+    const montoAnterior = datos.cajaChica.find((c) => c.id === editCaja.id)?.monto_asignado ?? 0;
+    if (monto > Number(montoAnterior) && vencidasCajaChica.length > 0) {
+      return setFormError(
+        `No se puede reponer: hay ${vencidasCajaChica.length} gasto(s) de caja chica sin comprobante con más de ` +
+        `24 horas. Adjunta su comprobante desde Gastos antes de aumentar el fondo.`
+      );
+    }
 
     setGuardando(true);
     const { error: err } = editCaja.id
@@ -327,6 +349,12 @@ export default function Dashboard() {
           <Stat label="Disponible" value={m.cajaChicaTotal > 0 ? money(m.cajaChicaDisponible) : '—'}
                 tone={m.cajaChicaTotal > 0 ? (m.cajaChicaDisponible < 0 ? 'critical' : 'good') : undefined} />
         </div>
+        {vencidasCajaChica.length > 0 && (
+          <Aviso tono="warning">
+            {vencidasCajaChica.length} gasto(s) de caja chica llevan más de 24 horas sin comprobante — hay que
+            adjuntarlo desde Gastos antes de poder reponer el fondo.
+          </Aviso>
+        )}
       </div>
 
       {/* ---------------- Presupuesto vs ejercido ---------------- */}
