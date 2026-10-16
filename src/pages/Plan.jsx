@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { subirArchivo } from '../lib/storage';
+import { subirArchivo, urlFirmada } from '../lib/storage';
 import { useAuth } from '../lib/auth';
 import {
   fechaCorta, hoyISO, money, pct, FRECUENCIAS, ESTATUS_ORDEN, TIPOS, CRITICIDAD, PRIORIDAD_SOLICITUD,
@@ -21,12 +21,33 @@ const COLOR_ESTATUS = {
 
 const TIPOS_ORDEN = ['preventivo', 'correctivo'];
 
+// Por ahora hardcodeado (coincide con la decision ya aprobada en el
+// documento: "Tres cotizaciones obligatorias arriba de $1,500 con
+// IVA"); se vuelve configurable por el admin en el paso 7.
+const UMBRAL_TRES_COTIZACIONES = 1500;
+
+const EXCEPCIONES_COTIZACION = {
+  emergencia_p1: 'Emergencia P1',
+  proveedor_unico: 'Proveedor único',
+  garantia_vigente: 'Garantía vigente',
+  contrato_autorizado: 'Contrato autorizado',
+  falta_respuesta: 'Falta de respuesta',
+  especialidad_sin_oferta: 'Especialidad sin oferta suficiente',
+  continuidad_trabajo: 'Continuidad de un trabajo iniciado',
+};
+
+const COT_VACIO = {
+  proveedor_id: '', monto: '', iva: '', vigencia: '', tiempo_entrega: '', garantia: '',
+  cumple_alcance: true, archivo: null,
+};
+
 const FORM_VACIO = {
   id: null, plan_id: '', sucursal_id: '', activo_id: '', proveedor_id: '',
   titulo: '', descripcion: '', tipo: 'correctivo', tipo_falla: '', criticidad: 'B', categoria_id: '',
   fecha_programada: hoyISO(), fecha_realizada: '', estatus: 'programada',
   costo_estimado: '', duracion_estimada_horas: '', notas: '',
   diagnostico: '', alcance: '', fecha_compromiso: '', prioridad: 'P3', requiere_proveedor: false,
+  cotizacion_excepcion: '', cotizacion_excepcion_motivo: '',
 };
 
 const FORM_FINAL_VACIO = {
@@ -36,7 +57,7 @@ const FORM_FINAL_VACIO = {
 };
 
 export default function Plan() {
-  const { puedeGestionar } = useAuth();
+  const { perfil, puedeGestionar } = useAuth();
   const [vista, setVista] = useState('activas');   // activas | historial | catalogo
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
@@ -57,10 +78,14 @@ export default function Plan() {
   const [subiendo, setSubiendo] = useState(null); // texto de progreso
   const [fotosAntes, setFotosAntes] = useState(fotosVaciasUnidad());
 
+  const [cotForm, setCotForm] = useState(COT_VACIO);
+  const [cotGuardando, setCotGuardando] = useState(false);
+  const [cotError, setCotError] = useState(null);
+
   async function cargar() {
-    const [o, p, s, c, a, prov, g, ev] = await Promise.all([
+    const [o, p, s, c, a, prov, g, ev, cot] = await Promise.all([
       supabase.from('ordenes')
-        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor')
+        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor, cotizacion_excepcion, cotizacion_excepcion_motivo')
         .order('fecha_programada', { ascending: true, nullsFirst: false }).limit(2000),
       supabase.from('planes').select('id, nombre, descripcion, frecuencia, servicio, categoria_id, activo').order('nombre'),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
@@ -69,12 +94,14 @@ export default function Plan() {
       supabase.from('proveedores').select('id, nombre').order('nombre'),
       supabase.from('gastos').select('orden_id, monto').not('orden_id', 'is', null),
       supabase.from('ordenes_evidencias').select('id, orden_id, momento, archivo_path'),
+      supabase.from('cotizaciones')
+        .select('id, orden_id, proveedor_id, monto, iva, total, vigencia, tiempo_entrega, garantia, cumple_alcance, archivo_path, creado_en'),
     ]);
-    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error;
+    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error || cot.error;
     if (err) { setError(err.message); return; }
     setD({
       ordenes: o.data, planes: p.data, sucursales: s.data, categorias: c.data,
-      activos: a.data, proveedores: prov.data, gastos: g.data, evidencias: ev.data,
+      activos: a.data, proveedores: prov.data, gastos: g.data, evidencias: ev.data, cotizaciones: cot.data,
     });
   }
   useEffect(() => { cargar(); }, []);
@@ -168,8 +195,10 @@ export default function Plan() {
       duracion_estimada_horas: o.duracion_estimada_horas ?? '', notas: o.notas ?? '',
       diagnostico: o.diagnostico ?? '', alcance: o.alcance ?? '', fecha_compromiso: o.fecha_compromiso ?? '',
       prioridad: o.prioridad ?? 'P3', requiere_proveedor: o.requiere_proveedor ?? false,
+      cotizacion_excepcion: o.cotizacion_excepcion ?? '', cotizacion_excepcion_motivo: o.cotizacion_excepcion_motivo ?? '',
     });
     setFotosAntes(fotosVaciasUnidad());
+    setCotForm(COT_VACIO); setCotError(null);
     setFormError(null); setModal(true);
   }
 
@@ -201,6 +230,8 @@ export default function Plan() {
       fecha_compromiso: form.fecha_compromiso || null,
       prioridad: form.prioridad || null,
       requiere_proveedor: form.requiere_proveedor,
+      cotizacion_excepcion: form.cotizacion_excepcion || null,
+      cotizacion_excepcion_motivo: form.cotizacion_excepcion ? (form.cotizacion_excepcion_motivo.trim() || null) : null,
     };
     setGuardando(true);
     const { data: ordenGuardada, error: err } = form.id
@@ -215,6 +246,47 @@ export default function Plan() {
 
     setGuardando(false);
     setModal(false); cargar();
+  }
+
+  // ------------------------------------------------------------ cotizaciones
+  async function agregarCotizacion() {
+    setCotError(null);
+    if (!cotForm.proveedor_id) return setCotError('Selecciona el proveedor.');
+    const monto = parseFloat(String(cotForm.monto).replace(/[$,\s]/g, ''));
+    if (isNaN(monto) || monto <= 0) return setCotError('Captura un monto válido.');
+    const ivaNum = cotForm.iva === '' ? null : parseFloat(String(cotForm.iva).replace(/[$,\s]/g, ''));
+    const total = monto + (ivaNum && !isNaN(ivaNum) ? ivaNum : 0);
+
+    setCotGuardando(true);
+    try {
+      let archivo_path = null;
+      if (cotForm.archivo) archivo_path = await subirArchivo(cotForm.archivo, `ordenes/${form.id}/cotizaciones`);
+      const { error: err } = await supabase.from('cotizaciones').insert({
+        orden_id: form.id, proveedor_id: Number(cotForm.proveedor_id),
+        monto, iva: ivaNum && !isNaN(ivaNum) ? ivaNum : null, total,
+        vigencia: cotForm.vigencia || null, tiempo_entrega: cotForm.tiempo_entrega.trim() || null,
+        garantia: cotForm.garantia.trim() || null, cumple_alcance: cotForm.cumple_alcance,
+        archivo_path, creado_por: perfil.id,
+      });
+      if (err) throw err;
+      setCotForm(COT_VACIO);
+      cargar();
+    } catch (err) {
+      setCotError(err.message);
+    } finally {
+      setCotGuardando(false);
+    }
+  }
+
+  async function quitarCotizacion(id) {
+    if (!confirm('¿Quitar esta cotización?')) return;
+    await supabase.from('cotizaciones').delete().eq('id', id);
+    cargar();
+  }
+
+  async function verArchivo(path) {
+    const url = await urlFirmada(path);
+    if (url) window.open(url, '_blank');
   }
 
   // ------------------------------------------------------ iniciar/finalizar
@@ -240,6 +312,15 @@ export default function Plan() {
     if (!formFinal.archivoComprobante) return setFormError('Sube el comprobante de gasto (factura o recibo).');
     if (!formFinal.fecha_realizada) return setFormError('Captura la fecha de realización.');
     if (cuentaFotosUnidad(fotosDespues) === 0) return setFormError('Sube al menos una foto de evidencia de cómo quedó el trabajo.');
+    if (monto > UMBRAL_TRES_COTIZACIONES && !ordenActiva.cotizacion_excepcion) {
+      const cumplen = (d.cotizaciones ?? []).filter((c) => c.orden_id === ordenActiva.id && c.cumple_alcance).length;
+      if (cumplen < 3) {
+        return setFormError(
+          `Esta orden supera $${UMBRAL_TRES_COTIZACIONES} — necesita 3 cotizaciones que cumplan el alcance ` +
+          `(tiene ${cumplen}) o una excepción registrada. Agrégalas desde "Editar orden".`
+        );
+      }
+    }
 
     setGuardando(true);
     try {
@@ -605,6 +686,91 @@ export default function Plan() {
             </div>
             <ChecklistFotos valor={fotosAntes} onChange={setFotosAntes} />
           </div>
+
+          {form.id && (() => {
+            const lista = (d.cotizaciones ?? []).filter((c) => c.orden_id === form.id);
+            const mejorTotal = Math.min(
+              ...lista.filter((c) => c.cumple_alcance).map((c) => Number(c.total)),
+              Infinity,
+            );
+            return (
+              <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Cotizaciones {lista.length > 0 && `(${lista.length})`}
+                </div>
+                {lista.length > 0 && (
+                  <div className="mb-3 space-y-1.5">
+                    {lista.map((c) => (
+                      <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 text-xs"
+                           style={{ borderColor: 'var(--border)' }}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{provById[c.proveedor_id]?.nombre ?? c.proveedor_nombre ?? '—'}</span>
+                          <span className="tnum">{money(c.total)}</span>
+                          {!c.cumple_alcance && <Badge color="var(--critical)">No cumple alcance</Badge>}
+                          {c.cumple_alcance && Number(c.total) === mejorTotal && <Badge color="var(--good)">Recomendada</Badge>}
+                          {c.vigencia && <span style={{ color: 'var(--text-muted)' }}>vigente a {fechaCorta(c.vigencia)}</span>}
+                          {c.archivo_path && (
+                            <button type="button" onClick={() => verArchivo(c.archivo_path)}
+                                    className="underline" style={{ color: 'var(--series-1)' }}>Ver archivo</button>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => quitarCotizacion(c.id)} className="underline" style={{ color: 'var(--critical)' }}>
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <SelectorProveedor proveedores={d.proveedores} value={cotForm.proveedor_id}
+                                     onChange={(v) => setCotForm({ ...cotForm, proveedor_id: v })}
+                                     onCreado={agregarProveedor} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input inputMode="decimal" placeholder="Monto" value={cotForm.monto}
+                           onChange={(e) => setCotForm({ ...cotForm, monto: e.target.value })} />
+                    <Input inputMode="decimal" placeholder="IVA" value={cotForm.iva}
+                           onChange={(e) => setCotForm({ ...cotForm, iva: e.target.value })} />
+                  </div>
+                  <Input type="date" placeholder="Vigencia" value={cotForm.vigencia}
+                         onChange={(e) => setCotForm({ ...cotForm, vigencia: e.target.value })} />
+                  <Input placeholder="Tiempo de entrega" value={cotForm.tiempo_entrega}
+                         onChange={(e) => setCotForm({ ...cotForm, tiempo_entrega: e.target.value })} />
+                  <Input placeholder="Garantía" value={cotForm.garantia}
+                         onChange={(e) => setCotForm({ ...cotForm, garantia: e.target.value })} />
+                  <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <input type="checkbox" checked={cotForm.cumple_alcance}
+                           onChange={(e) => setCotForm({ ...cotForm, cumple_alcance: e.target.checked })} />
+                    Cumple el alcance solicitado
+                  </label>
+                </div>
+                <div className="mt-2">
+                  <FotoOPdfInput value={cotForm.archivo} onChange={(f) => setCotForm({ ...cotForm, archivo: f })} />
+                </div>
+                {cotError && <Aviso tono="critical">{cotError}</Aviso>}
+                <div className="mt-2 flex justify-end">
+                  <Boton type="button" variant="ghost" disabled={cotGuardando} onClick={agregarCotizacion}>
+                    {cotGuardando ? 'Agregando…' : '+ Agregar cotización'}
+                  </Boton>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Campo label="Excepción a las 3 cotizaciones" hint="Opcional — solo si no se van a juntar 3 propuestas">
+              <Select value={form.cotizacion_excepcion} onChange={(e) => setForm({ ...form, cotizacion_excepcion: e.target.value })}>
+                <option value="">Sin excepción</option>
+                {Object.entries(EXCEPCIONES_COTIZACION).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </Select>
+            </Campo>
+            {form.cotizacion_excepcion && (
+              <Campo label="Motivo de la excepción" required>
+                <Input value={form.cotizacion_excepcion_motivo} required
+                       onChange={(e) => setForm({ ...form, cotizacion_excepcion_motivo: e.target.value })} />
+              </Campo>
+            )}
+          </div>
+
           <Campo label="Notas">
             <Textarea rows={2} value={form.notas}
                       onChange={(e) => setForm({ ...form, notas: e.target.value })} />
