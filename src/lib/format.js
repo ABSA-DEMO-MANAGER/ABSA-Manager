@@ -86,6 +86,23 @@ export const ESTADO_ACTIVO = {
   inactivo:   { label: 'Inactivo',   color: 'var(--critical)' },
 };
 
+export const ESTATUS_SOLICITUD = {
+  nueva:                  { label: 'Nueva',                   color: 'var(--series-1)' },
+  en_revision:            { label: 'En revisión',             color: 'var(--series-3)' },
+  informacion_requerida:  { label: 'Información requerida',   color: 'var(--serious)' },
+  aceptada:               { label: 'Aceptada',                color: 'var(--good)' },
+  convertida:             { label: 'Convertida en orden',     color: 'var(--good)' },
+  rechazada:              { label: 'Rechazada',                color: 'var(--critical)' },
+  duplicada:              { label: 'Duplicada',                color: 'var(--text-muted)' },
+};
+
+export const PRIORIDAD_SOLICITUD = {
+  P1: { label: 'P1 — Emergencia', hint: 'Riesgo para personas, incendio, seguridad o paro grave', color: 'var(--critical)' },
+  P2: { label: 'P2 — Alta',       hint: 'Afectación importante sin riesgo inmediato',             color: 'var(--serious)' },
+  P3: { label: 'P3 — Media',      hint: 'Afectación parcial con alternativa',                     color: 'var(--series-3)' },
+  P4: { label: 'P4 — Baja',       hint: 'Mejora, estética o falla menor',                          color: 'var(--text-muted)' },
+};
+
 export const COBERTURA = {
   local: 'Local',
   regional: 'Regional',
