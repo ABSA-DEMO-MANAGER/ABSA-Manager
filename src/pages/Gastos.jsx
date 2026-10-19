@@ -17,13 +17,15 @@ import PeriodoFiltro from '../components/PeriodoFiltro';
 const VACIO = {
   fecha: hoyISO(), sucursal_id: '', concepto: '', tipo: 'insumo',
   unidad_pago: 'compania', estatus_pago: 'borrador', cotizaciones: 1,
-  monto: '', proveedor_id: '', factura: '', archivo: null,
+  monto: '', proveedor_id: '', factura: '', archivo: null, caja_chica_emergencia: false,
 };
 
-// Valor por defecto mientras carga mantenimiento_config (paso 7); un
-// admin lo edita en Configuración sin tocar código. Mismo umbral que
-// usa Plan.jsx y que exige la policy de gastos en la base de datos.
+// Valores por defecto mientras carga mantenimiento_config (paso 7); un
+// admin los edita en Configuración sin tocar código. Mismos umbrales
+// que usa Plan.jsx y que exige la base de datos (policies de gastos).
 const DEFAULT_UMBRAL_SIN_AUTORIZACION = 500;
+const DEFAULT_CAJA_CHICA_LIMITE_EVENTO = 1500;
+const DEFAULT_CAJA_CHICA_LIMITE_EMERGENCIA = 3000;
 
 // Preventivo/correctivo solo se generan al finalizar una orden en el Plan
 // de mantenimiento (se piden proveedor y comprobantes ahí). Aquí solo se
@@ -41,6 +43,8 @@ export default function Gastos() {
   const [error, setError] = useState(null);
 
   const UMBRAL_SIN_AUTORIZACION = config?.monto_sin_autorizacion ?? DEFAULT_UMBRAL_SIN_AUTORIZACION;
+  const CAJA_CHICA_LIMITE_EVENTO = config?.caja_chica_limite_evento ?? DEFAULT_CAJA_CHICA_LIMITE_EVENTO;
+  const CAJA_CHICA_LIMITE_EMERGENCIA = config?.caja_chica_limite_emergencia ?? DEFAULT_CAJA_CHICA_LIMITE_EMERGENCIA;
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(VACIO);
@@ -60,7 +64,8 @@ export default function Gastos() {
         .order('fecha', { ascending: false }).limit(2000),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
-      supabase.from('mantenimiento_config').select('monto_sin_autorizacion').eq('id', 1).single(),
+      supabase.from('mantenimiento_config')
+        .select('monto_sin_autorizacion, caja_chica_limite_evento, caja_chica_limite_emergencia').eq('id', 1).single(),
     ]);
     if (g.error || s.error || p.error) { setError((g.error || s.error || p.error).message); return; }
     setGastos(g.data); setSucursales(s.data); setProveedores(p.data); setConfig(cfg.data);
@@ -96,6 +101,16 @@ export default function Gastos() {
     const monto = parseFloat(String(form.monto).replace(/[$,\s]/g, ''));
     if (isNaN(monto)) return setFormError('El monto no es un número válido.');
     if (monto < 0) return setFormError('El monto no puede ser negativo. Si es una nota de crédito, regístrala como tal.');
+    if (form.unidad_pago === 'caja_chica') {
+      const limite = form.caja_chica_emergencia ? CAJA_CHICA_LIMITE_EMERGENCIA : CAJA_CHICA_LIMITE_EVENTO;
+      if (monto > limite) {
+        return setFormError(
+          form.caja_chica_emergencia
+            ? `Ni como emergencia puede superar $${limite} de caja chica.`
+            : `Caja chica no puede superar $${limite} por evento. Si es una emergencia real, marca la casilla.`
+        );
+      }
+    }
 
     setGuardando(true);
     let comprobante_path = null;
@@ -113,6 +128,7 @@ export default function Gastos() {
       proveedor_id: form.proveedor_id ? Number(form.proveedor_id) : null,
       factura: form.factura.trim() || null,
       comprobante_path, comprobado_en: comprobante_path ? new Date().toISOString() : null,
+      caja_chica_emergencia: form.unidad_pago === 'caja_chica' ? form.caja_chica_emergencia : false,
       creado_por: perfil.id,
     });
     setGuardando(false);
@@ -314,11 +330,21 @@ export default function Gastos() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Campo label="Unidad de pago">
+            <Campo label="Unidad de pago"
+                   hint={form.unidad_pago === 'caja_chica'
+                     ? `Tope ${form.caja_chica_emergencia ? 'de emergencia' : 'por evento'}: $${form.caja_chica_emergencia ? CAJA_CHICA_LIMITE_EMERGENCIA : CAJA_CHICA_LIMITE_EVENTO}`
+                     : undefined}>
               <Select value={form.unidad_pago}
                       onChange={(e) => setForm({ ...form, unidad_pago: e.target.value })}>
                 {Object.entries(UNIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </Select>
+              {form.unidad_pago === 'caja_chica' && (
+                <label className="mt-2 flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <input type="checkbox" checked={form.caja_chica_emergencia}
+                         onChange={(e) => setForm({ ...form, caja_chica_emergencia: e.target.checked })} />
+                  Es una emergencia
+                </label>
+              )}
             </Campo>
             <Campo label="Estatus de pago"
                    hint={(Number(form.monto) || 0) > UMBRAL_SIN_AUTORIZACION ? `Arriba de $${UMBRAL_SIN_AUTORIZACION} se autoriza desde Aprobaciones` : undefined}>

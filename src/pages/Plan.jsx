@@ -25,6 +25,8 @@ const TIPOS_ORDEN = ['preventivo', 'correctivo'];
 // un admin los edita en Configuración sin tocar código.
 const DEFAULT_UMBRAL_TRES_COTIZACIONES = 1500;
 const DEFAULT_UMBRAL_SIN_AUTORIZACION = 500;
+const DEFAULT_CAJA_CHICA_LIMITE_EVENTO = 1500;
+const DEFAULT_CAJA_CHICA_LIMITE_EMERGENCIA = 3000;
 
 const EXCEPCIONES_COTIZACION = {
   emergencia_p1: 'Emergencia P1',
@@ -53,7 +55,7 @@ const FORM_VACIO = {
 const FORM_FINAL_VACIO = {
   fecha_realizada: hoyISO(), duracion_real_horas: '', proveedor_id: '',
   unidad_pago: 'compania', estatus_pago: 'pagado', monto: '', cotizaciones: 1,
-  factura: '', archivoCotizacion: null, archivoComprobante: null,
+  factura: '', archivoCotizacion: null, archivoComprobante: null, caja_chica_emergencia: false,
 };
 
 export default function Plan() {
@@ -84,6 +86,8 @@ export default function Plan() {
 
   const UMBRAL_TRES_COTIZACIONES = d?.config?.monto_tres_cotizaciones ?? DEFAULT_UMBRAL_TRES_COTIZACIONES;
   const UMBRAL_SIN_AUTORIZACION = d?.config?.monto_sin_autorizacion ?? DEFAULT_UMBRAL_SIN_AUTORIZACION;
+  const CAJA_CHICA_LIMITE_EVENTO = d?.config?.caja_chica_limite_evento ?? DEFAULT_CAJA_CHICA_LIMITE_EVENTO;
+  const CAJA_CHICA_LIMITE_EMERGENCIA = d?.config?.caja_chica_limite_emergencia ?? DEFAULT_CAJA_CHICA_LIMITE_EMERGENCIA;
 
   async function cargar() {
     const [o, p, s, c, a, prov, g, ev, cot, cfg, per] = await Promise.all([
@@ -99,7 +103,9 @@ export default function Plan() {
       supabase.from('ordenes_evidencias').select('id, orden_id, momento, archivo_path'),
       supabase.from('cotizaciones')
         .select('id, orden_id, proveedor_id, monto, iva, total, vigencia, tiempo_entrega, garantia, cumple_alcance, archivo_path, creado_en'),
-      supabase.from('mantenimiento_config').select('monto_sin_autorizacion, monto_tres_cotizaciones').eq('id', 1).single(),
+      supabase.from('mantenimiento_config')
+        .select('monto_sin_autorizacion, monto_tres_cotizaciones, caja_chica_limite_evento, caja_chica_limite_emergencia')
+        .eq('id', 1).single(),
       supabase.from('perfiles').select('id, nombre'),
     ]);
     const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error || cot.error || per.error;
@@ -322,6 +328,16 @@ export default function Plan() {
     if (!formFinal.archivoComprobante) return setFormError('Sube el comprobante de gasto (factura o recibo).');
     if (!formFinal.fecha_realizada) return setFormError('Captura la fecha de realización.');
     if (cuentaFotosUnidad(fotosDespues) === 0) return setFormError('Sube al menos una foto de evidencia de cómo quedó el trabajo.');
+    if (formFinal.unidad_pago === 'caja_chica') {
+      const limite = formFinal.caja_chica_emergencia ? CAJA_CHICA_LIMITE_EMERGENCIA : CAJA_CHICA_LIMITE_EVENTO;
+      if (monto > limite) {
+        return setFormError(
+          formFinal.caja_chica_emergencia
+            ? `Ni como emergencia puede superar $${limite} de caja chica.`
+            : `Caja chica no puede superar $${limite} por evento. Si es una emergencia real, marca la casilla.`
+        );
+      }
+    }
     if (monto > UMBRAL_TRES_COTIZACIONES && !ordenActiva.cotizacion_excepcion) {
       const cumplen = (d.cotizaciones ?? []).filter((c) => c.orden_id === ordenActiva.id && c.cumple_alcance).length;
       if (cumplen < 3) {
@@ -362,6 +378,7 @@ export default function Plan() {
         comprobante_cotizacion_path: rutaCot,
         comprobante_gasto_path: rutaComp,
         comprobante_path: rutaComp, comprobado_en: new Date().toISOString(),
+        caja_chica_emergencia: formFinal.unidad_pago === 'caja_chica' ? formFinal.caja_chica_emergencia : false,
         creado_por: perfil.id,
       });
       if (errGasto) throw errGasto;
@@ -840,13 +857,23 @@ export default function Plan() {
                                  onCreado={agregarProveedor} />
             </Campo>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Se pagó con" required>
+              <Campo label="Se pagó con" required
+                     hint={formFinal.unidad_pago === 'caja_chica'
+                       ? `Tope ${formFinal.caja_chica_emergencia ? 'de emergencia' : 'por evento'}: $${formFinal.caja_chica_emergencia ? CAJA_CHICA_LIMITE_EMERGENCIA : CAJA_CHICA_LIMITE_EVENTO}`
+                       : undefined}>
                 <Select value={formFinal.unidad_pago}
                         onChange={(e) => setFormFinal({ ...formFinal, unidad_pago: e.target.value })}>
                   <option value="compania">Presupuesto (compañía)</option>
                   <option value="caja_chica">Caja chica</option>
                   <option value="empleado">Empleado (a reembolsar)</option>
                 </Select>
+                {formFinal.unidad_pago === 'caja_chica' && (
+                  <label className="mt-2 flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <input type="checkbox" checked={formFinal.caja_chica_emergencia}
+                           onChange={(e) => setFormFinal({ ...formFinal, caja_chica_emergencia: e.target.checked })} />
+                    Es una emergencia
+                  </label>
+                )}
               </Campo>
               <Campo label="Monto" required>
                 <Input inputMode="decimal" value={formFinal.monto} required placeholder="0.00"
