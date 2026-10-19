@@ -57,7 +57,22 @@ drop trigger if exists gastos_folio on gastos;
 create trigger gastos_folio before insert on gastos
   for each row execute function gastos_folio();
 
+-- gastos_mantenimiento_requiere_orden (05-ampliacion.sql) se creo como
+-- "not valid" a proposito -- para no exigirle orden_id al historico
+-- migrado de Excel, solo a partir de ahi en adelante. Pero cualquier
+-- UPDATE a una fila (aunque sea de otra columna, como este backfill de
+-- folio) hace que Postgres vuelva a checar TODAS las constraints de esa
+-- fila, y el historico exento revienta la validacion. Se quita antes
+-- del backfill y se vuelve a crear exactamente igual (not valid) para
+-- no cambiar esa regla de negocio.
+alter table gastos drop constraint if exists gastos_mantenimiento_requiere_orden;
+
 update gastos set folio = 'GAS-' || lpad(nextval('gastos_folio_seq')::text, 6, '0')
 where folio is null;
+
+alter table gastos
+  add constraint gastos_mantenimiento_requiere_orden
+  check (tipo not in ('preventivo','correctivo') or orden_id is not null)
+  not valid;
 
 commit;
