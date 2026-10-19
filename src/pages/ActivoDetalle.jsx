@@ -55,7 +55,7 @@ export default function ActivoDetalle() {
       supabase.from('sucursales').select('id, codigo, nombre').order('codigo'),
       supabase.from('categorias').select('id, nombre').order('orden'),
       supabase.from('ordenes')
-        .select('id, tipo, tipo_falla, titulo, descripcion, criticidad, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, proveedor_id')
+        .select('id, folio, tipo, tipo_falla, titulo, descripcion, criticidad, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, proveedor_id')
         .eq('activo_id', id).order('fecha_programada', { ascending: false, nullsFirst: false }),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
       supabase.from('activos_cambios')
@@ -147,6 +147,7 @@ export default function ActivoDetalle() {
       costo_estimado: formMant.costo_estimado === '' ? null : Number(formMant.costo_estimado),
       duracion_estimada_horas: formMant.duracion_estimada_horas === '' ? null : Number(formMant.duracion_estimada_horas),
       proveedor_id: formMant.proveedor_id ? Number(formMant.proveedor_id) : null,
+      creado_por: perfil.id, responsable_id: perfil.id,
     });
     setGuardando(false);
     if (err) return setFormError(err.message);
@@ -394,7 +395,7 @@ export default function ActivoDetalle() {
                   render: (o) => fechaCorta(o.fecha_realizada ?? o.fecha_programada) },
                 { key: 'titulo', header: 'Orden', render: (o) => (
                     <div>
-                      <div>{o.titulo}</div>
+                      <div>{o.folio && <span className="tnum" style={{ color: 'var(--text-muted)' }}>{o.folio} · </span>}{o.titulo}</div>
                       {o.tipo_falla && (
                         <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Falla: {o.tipo_falla}</div>)}
                     </div>) },

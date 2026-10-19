@@ -47,7 +47,7 @@ export default function Solicitudes() {
       supabase.from('categorias').select('id, nombre').order('orden'),
       supabase.from('activos').select('id, sucursal_id, nombre, codigo').order('nombre'),
       supabase.from('perfiles').select('id, nombre'),
-      supabase.from('ordenes').select('id, estatus'),
+      supabase.from('ordenes').select('id, folio, estatus'),
       supabase.from('encuestas').select('id, orden_id, calificacion, comentario'),
     ]);
     const err = s.error || suc.error || cat.error || act.error || per.error || ord.error || enc.error;
@@ -169,15 +169,18 @@ export default function Solicitudes() {
     setRevisando(true);
     setRevisionError(null);
     try {
-      // Mapeo provisional P1-P4 -> A/B/C mientras Ordenes no tiene su propio
-      // campo de prioridad (eso llega en el siguiente paso del rediseño).
+      // criticidad A/B/C es un campo mas viejo que prioridad P1-P4 (llego
+      // despues, paso 3 del rediseno) -- se siguen llenando los dos: la
+      // lista de ordenes ya usa criticidad para su badge de color.
       const criticidad = { P1: 'A', P2: 'B', P3: 'B', P4: 'C' }[revision.prioridad_confirmada] ?? 'B';
       const { data: orden, error: errO } = await supabase.from('ordenes').insert({
         sucursal_id: detalle.sucursal_id, activo_id: detalle.activo_id,
         categoria_id: revision.categoria_id ? Number(revision.categoria_id) : null,
         titulo: detalle.descripcion.slice(0, 80),
-        descripcion: detalle.descripcion, tipo: 'correctivo', criticidad, estatus: 'programada',
-      }).select('id').maybeSingle();
+        descripcion: detalle.descripcion, tipo: 'correctivo', criticidad,
+        prioridad: revision.prioridad_confirmada, estatus: 'programada',
+        creado_por: perfil.id, responsable_id: perfil.id,
+      }).select('id, folio').maybeSingle();
       if (errO) throw errO;
 
       const { error: errS } = await supabase.from('solicitudes')
@@ -342,7 +345,9 @@ export default function Solicitudes() {
             {['rechazada', 'duplicada'].includes(detalle.estatus) && detalle.motivo_rechazo && (
               <Aviso tono="critical">{detalle.motivo_rechazo}</Aviso>
             )}
-            {detalle.orden_id && <Aviso tono="good">Convertida en la orden #{detalle.orden_id}.</Aviso>}
+            {detalle.orden_id && (
+              <Aviso tono="good">Convertida en la orden {ordenById[detalle.orden_id]?.folio ?? `#${detalle.orden_id}`}.</Aviso>
+            )}
 
             {detalle.orden_id && ordenById[detalle.orden_id]?.estatus === 'realizada' && (() => {
               const encuesta = encuestaByOrden[detalle.orden_id];

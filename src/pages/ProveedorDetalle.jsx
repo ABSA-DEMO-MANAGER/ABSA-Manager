@@ -39,7 +39,7 @@ export default function ProveedorDetalle() {
         .select('id, nombre, servicio, es_fijo, ciudad, cobertura, factura, contacto, telefono, notas')
         .eq('id', id).maybeSingle(),
       supabase.from('ordenes')
-        .select('id, titulo, estatus, fecha_programada, fecha_realizada')
+        .select('id, folio, titulo, estatus, fecha_programada, fecha_realizada')
         .eq('proveedor_id', id).order('fecha_programada', { ascending: false, nullsFirst: false }),
       supabase.from('cotizaciones')
         .select('id, orden_id, monto, total, vigencia, cumple_alcance, archivo_path, creado_en')
@@ -275,7 +275,8 @@ export default function ProveedorDetalle() {
               vacio="Sin cotizaciones de este proveedor todavía."
               columnas={[
                 { key: 'creado_en', header: 'Fecha', nowrap: true, render: (c) => fechaCorta(c.creado_en?.slice(0, 10)) },
-                { key: 'orden', header: 'Orden', render: (c) => ordenById[c.orden_id]?.titulo ?? '—' },
+                { key: 'orden', header: 'Orden', render: (c) => (
+                    ordenById[c.orden_id] ? `${ordenById[c.orden_id].folio ? ordenById[c.orden_id].folio + ' · ' : ''}${ordenById[c.orden_id].titulo}` : '—') },
                 { key: 'total', header: 'Monto', align: 'right', render: (c) => money(c.total) },
                 { key: 'cumple_alcance', header: 'Cumple alcance', nowrap: true,
                   render: (c) => <Badge color={c.cumple_alcance ? 'var(--good)' : 'var(--critical)'}>{c.cumple_alcance ? 'Sí' : 'No'}</Badge> },
@@ -296,7 +297,8 @@ export default function ProveedorDetalle() {
               vacio="Sin órdenes asignadas a este proveedor todavía."
               columnas={[
                 { key: 'fecha', header: 'Fecha', nowrap: true, render: (o) => fechaCorta(o.fecha_realizada ?? o.fecha_programada) },
-                { key: 'titulo', header: 'Orden', render: (o) => o.titulo },
+                { key: 'titulo', header: 'Orden', render: (o) => (
+                    <>{o.folio && <span className="tnum" style={{ color: 'var(--text-muted)' }}>{o.folio} · </span>}{o.titulo}</>) },
                 { key: 'estatus', header: 'Estatus', nowrap: true, render: (o) => <Badge dot={false}>{ESTATUS_ORDEN[o.estatus]}</Badge> },
               ]}
               filas={d.ordenes}

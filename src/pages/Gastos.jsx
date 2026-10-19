@@ -31,7 +31,7 @@ const DEFAULT_UMBRAL_SIN_AUTORIZACION = 500;
 const TIPOS_CAPTURA_DIRECTA = ['remodelacion', 'insumo', 'viaticos', 'otro'];
 
 export default function Gastos() {
-  const { puedeGestionar } = useAuth();
+  const { perfil, puedeGestionar } = useAuth();
   const [params, setParams] = useSearchParams();
 
   const [gastos, setGastos] = useState(null);
@@ -56,7 +56,7 @@ export default function Gastos() {
   async function cargar() {
     const [g, s, p, cfg] = await Promise.all([
       supabase.from('gastos')
-        .select('id, fecha, sucursal_id, concepto, tipo, unidad_pago, estatus_pago, cotizaciones, monto, factura, requiere_revision, nota_revision, proveedor_id, orden_id, comprobante_cotizacion_path, comprobante_gasto_path, comprobante_path, comprobado_en, creado_en')
+        .select('id, folio, fecha, sucursal_id, concepto, tipo, unidad_pago, estatus_pago, cotizaciones, monto, factura, requiere_revision, nota_revision, proveedor_id, orden_id, comprobante_cotizacion_path, comprobante_gasto_path, comprobante_path, comprobado_en, creado_en')
         .order('fecha', { ascending: false }).limit(2000),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('proveedores').select('id, nombre').order('nombre'),
@@ -113,6 +113,7 @@ export default function Gastos() {
       proveedor_id: form.proveedor_id ? Number(form.proveedor_id) : null,
       factura: form.factura.trim() || null,
       comprobante_path, comprobado_en: comprobante_path ? new Date().toISOString() : null,
+      creado_por: perfil.id,
     });
     setGuardando(false);
     if (err) return setFormError(err.message);
@@ -156,7 +157,7 @@ export default function Gastos() {
     { key: 'sucursal_id', header: 'Sucursal', nowrap: true, render: (g) => sucById[g.sucursal_id]?.codigo ?? '—' },
     { key: 'concepto', header: 'Concepto', render: (g) => (
         <div>
-          <div>{g.concepto}</div>
+          <div>{g.folio && <span className="tnum" style={{ color: 'var(--text-muted)' }}>{g.folio} · </span>}{g.concepto}</div>
           {(g.comprobante_cotizacion_path || g.comprobante_gasto_path || g.comprobante_path) && (
             <div className="mt-1 flex gap-3 text-xs">
               {g.comprobante_cotizacion_path && (

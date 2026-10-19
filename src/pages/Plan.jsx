@@ -42,7 +42,7 @@ const COT_VACIO = {
 };
 
 const FORM_VACIO = {
-  id: null, plan_id: '', sucursal_id: '', activo_id: '', proveedor_id: '',
+  id: null, plan_id: '', sucursal_id: '', activo_id: '', proveedor_id: '', responsable_id: '',
   titulo: '', descripcion: '', tipo: 'correctivo', tipo_falla: '', criticidad: 'B', categoria_id: '',
   fecha_programada: hoyISO(), fecha_realizada: '', estatus: 'programada',
   costo_estimado: '', duracion_estimada_horas: '', notas: '',
@@ -86,9 +86,9 @@ export default function Plan() {
   const UMBRAL_SIN_AUTORIZACION = d?.config?.monto_sin_autorizacion ?? DEFAULT_UMBRAL_SIN_AUTORIZACION;
 
   async function cargar() {
-    const [o, p, s, c, a, prov, g, ev, cot, cfg] = await Promise.all([
+    const [o, p, s, c, a, prov, g, ev, cot, cfg, per] = await Promise.all([
       supabase.from('ordenes')
-        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor, cotizacion_excepcion, cotizacion_excepcion_motivo')
+        .select('id, folio, sucursal_id, activo_id, plan_id, proveedor_id, responsable_id, creado_por, tipo, titulo, descripcion, tipo_falla, criticidad, categoria_id, fecha_programada, fecha_realizada, estatus, costo_estimado, duracion_estimada_horas, duracion_real_horas, notas, diagnostico, alcance, fecha_compromiso, prioridad, requiere_proveedor, cotizacion_excepcion, cotizacion_excepcion_motivo')
         .order('fecha_programada', { ascending: true, nullsFirst: false }).limit(2000),
       supabase.from('planes').select('id, nombre, descripcion, frecuencia, servicio, categoria_id, activo').order('nombre'),
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
@@ -100,13 +100,14 @@ export default function Plan() {
       supabase.from('cotizaciones')
         .select('id, orden_id, proveedor_id, monto, iva, total, vigencia, tiempo_entrega, garantia, cumple_alcance, archivo_path, creado_en'),
       supabase.from('mantenimiento_config').select('monto_sin_autorizacion, monto_tres_cotizaciones').eq('id', 1).single(),
+      supabase.from('perfiles').select('id, nombre'),
     ]);
-    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error || cot.error;
+    const err = o.error || p.error || s.error || c.error || a.error || prov.error || g.error || ev.error || cot.error || per.error;
     if (err) { setError(err.message); return; }
     setD({
       ordenes: o.data, planes: p.data, sucursales: s.data, categorias: c.data,
       activos: a.data, proveedores: prov.data, gastos: g.data, evidencias: ev.data, cotizaciones: cot.data,
-      config: cfg.data,
+      config: cfg.data, perfiles: per.data,
     });
   }
   useEffect(() => { cargar(); }, []);
@@ -115,6 +116,7 @@ export default function Plan() {
   const catById = useMemo(() => Object.fromEntries((d?.categorias ?? []).map((c) => [c.id, c])), [d]);
   const activoById = useMemo(() => Object.fromEntries((d?.activos ?? []).map((a) => [a.id, a])), [d]);
   const provById = useMemo(() => Object.fromEntries((d?.proveedores ?? []).map((p) => [p.id, p])), [d]);
+  const perfilById = useMemo(() => Object.fromEntries((d?.perfiles ?? []).map((p) => [p.id, p])), [d]);
   const costoRealPorOrden = useMemo(() => {
     const m = {};
     (d?.gastos ?? []).forEach((g) => { m[g.orden_id] = (m[g.orden_id] || 0) + Number(g.monto); });
@@ -185,6 +187,7 @@ export default function Plan() {
       ...FORM_VACIO,
       plan_id: plan?.id ?? '', titulo: plan?.nombre ?? '', descripcion: plan?.descripcion ?? '',
       tipo: plan ? 'preventivo' : 'correctivo', categoria_id: plan?.categoria_id ? String(plan.categoria_id) : '',
+      responsable_id: perfil?.id ?? '',
     });
     setFotosAntes(fotosVaciasUnidad());
     setFormError(null); setModal(true);
@@ -193,6 +196,7 @@ export default function Plan() {
     setForm({
       id: o.id, plan_id: o.plan_id ?? '', sucursal_id: String(o.sucursal_id),
       activo_id: o.activo_id ? String(o.activo_id) : '', proveedor_id: o.proveedor_id ? String(o.proveedor_id) : '',
+      responsable_id: o.responsable_id ?? '',
       titulo: o.titulo, descripcion: o.descripcion ?? '', tipo: o.tipo, tipo_falla: o.tipo_falla ?? '',
       criticidad: o.criticidad ?? 'B', categoria_id: o.categoria_id ? String(o.categoria_id) : '',
       fecha_programada: o.fecha_programada ?? '', fecha_realizada: o.fecha_realizada ?? '',
@@ -217,6 +221,7 @@ export default function Plan() {
       sucursal_id: Number(form.sucursal_id),
       activo_id: form.activo_id ? Number(form.activo_id) : null,
       proveedor_id: form.proveedor_id ? Number(form.proveedor_id) : null,
+      responsable_id: form.responsable_id || null,
       plan_id: form.plan_id ? Number(form.plan_id) : null,
       titulo: form.titulo.trim(),
       descripcion: form.descripcion.trim() || null,
@@ -241,7 +246,7 @@ export default function Plan() {
     setGuardando(true);
     const { data: ordenGuardada, error: err } = form.id
       ? await supabase.from('ordenes').update(payload).eq('id', form.id).select('id').maybeSingle()
-      : await supabase.from('ordenes').insert(payload).select('id').maybeSingle();
+      : await supabase.from('ordenes').insert({ ...payload, creado_por: perfil.id }).select('id').maybeSingle();
     if (err) { setGuardando(false); return setFormError(err.message); }
 
     for (const file of fotosAntes) {
@@ -357,6 +362,7 @@ export default function Plan() {
         comprobante_cotizacion_path: rutaCot,
         comprobante_gasto_path: rutaComp,
         comprobante_path: rutaComp, comprobado_en: new Date().toISOString(),
+        creado_por: perfil.id,
       });
       if (errGasto) throw errGasto;
 
@@ -385,7 +391,7 @@ export default function Plan() {
     { key: 'fecha_programada', header: 'Programada', nowrap: true, render: (o) => fechaCorta(o.fecha_programada) },
     { key: 'titulo', header: 'Orden', render: (o) => (
         <div>
-          <div>{o.titulo}</div>
+          <div>{o.folio && <span className="tnum" style={{ color: 'var(--text-muted)' }}>{o.folio} · </span>}{o.titulo}</div>
           <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs" style={{ color: 'var(--text-muted)' }}>
             {activoById[o.activo_id]?.nombre && <span>{activoById[o.activo_id].nombre}</span>}
             {catById[o.categoria_id]?.nombre && <span>· {catById[o.categoria_id].nombre}</span>}
@@ -393,6 +399,7 @@ export default function Plan() {
           </div>
         </div>) },
     { key: 'sucursal_id', header: 'Sucursal', nowrap: true, render: (o) => sucById[o.sucursal_id]?.codigo ?? '—' },
+    { key: 'responsable_id', header: 'Responsable', nowrap: true, render: (o) => perfilById[o.responsable_id]?.nombre ?? '—' },
     { key: 'tipo', header: 'Tipo', nowrap: true,
       render: (o) => <Badge color={TIPOS[o.tipo]?.color}>{TIPOS[o.tipo]?.label}</Badge> },
     { key: 'criticidad', header: 'Criticidad', nowrap: true,
@@ -666,11 +673,19 @@ export default function Plan() {
                      onChange={(e) => setForm({ ...form, duracion_estimada_horas: e.target.value })} />
             </Campo>
           </div>
-          <Campo label="Proveedor" hint="Opcional — también se puede asignar al finalizar">
-            <SelectorProveedor proveedores={d.proveedores} value={form.proveedor_id}
-                               onChange={(v) => setForm({ ...form, proveedor_id: v })}
-                               onCreado={agregarProveedor} />
-          </Campo>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Campo label="Proveedor" hint="Opcional — también se puede asignar al finalizar">
+              <SelectorProveedor proveedores={d.proveedores} value={form.proveedor_id}
+                                 onChange={(v) => setForm({ ...form, proveedor_id: v })}
+                                 onCreado={agregarProveedor} />
+            </Campo>
+            <Campo label="Responsable" hint="Quién la ejecuta — se puede reasignar">
+              <Select value={form.responsable_id} onChange={(e) => setForm({ ...form, responsable_id: e.target.value })}>
+                <option value="">Sin asignar</option>
+                {d.perfiles.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Select>
+            </Campo>
+          </div>
           <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
             <input type="checkbox" checked={form.requiere_proveedor}
                    onChange={(e) => setForm({ ...form, requiere_proveedor: e.target.checked })} />
