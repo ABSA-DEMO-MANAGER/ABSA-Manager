@@ -5,6 +5,7 @@ import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, fechaCorta } from '../../lib/format';
 import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
 import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
+import BitacoraVehiculo from '../../components/BitacoraVehiculo';
 import {
   ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
   categoriaTicketDe, combinarTicketsYSolicitudes,
@@ -84,7 +85,7 @@ export default function MiUnidad() {
 
   async function cargar() {
     if (!vehiculoId) { setD({ sinUnidad: true }); return; }
-    const [v, gastos, sol, serv, sin, tix, docs] = await Promise.all([
+    const [v, gastos, sol, serv, sin, tix, docs, bit, per] = await Promise.all([
       supabase.from('flota_vehiculos').select('*').eq('id', vehiculoId).maybeSingle(),
       supabase.from('flota_gastos')
         .select('categoria, monto, litros, mes, estatus, origen')
@@ -104,12 +105,25 @@ export default function MiUnidad() {
       supabase.from('flota_documentos')
         .select('id, tipo, referencia, vence, monto, archivo_path')
         .eq('vehiculo_id', vehiculoId).order('vence'),
+      supabase.from('flota_bitacora')
+        .select('id, accion, antes, despues, hecho_por, creado_en')
+        .eq('vehiculo_id', vehiculoId).order('creado_en', { ascending: false }).limit(30),
+      supabase.from('perfiles').select('id, nombre'),
     ]);
-    const err = v.error || gastos.error || sol.error || serv.error || sin.error || tix.error || docs.error;
+    const err = v.error || gastos.error || sol.error || serv.error || sin.error || tix.error || docs.error || bit.error || per.error;
     if (err) { setError(err.message); return; }
+
+    let archivosServicio = [];
+    const servicioIds = serv.data.map((x) => x.id);
+    if (servicioIds.length) {
+      const sa = await supabase.from('flota_servicio_archivos').select('id, servicio_id, archivo_path').in('servicio_id', servicioIds);
+      if (sa.error) { setError(sa.error.message); return; }
+      archivosServicio = sa.data;
+    }
+
     setD({
       vehiculo: v.data, gastos: gastos.data, solicitudes: sol.data, servicios: serv.data, siniestros: sin.data,
-      tickets: tix.data, documentos: docs.data,
+      tickets: tix.data, documentos: docs.data, bitacora: bit.data, personas: per.data ?? [], archivosServicio,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [vehiculoId]);
@@ -123,6 +137,12 @@ export default function MiUnidad() {
     return o;
   }, [d]);
   const historialTickets = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
+  const personaById = useMemo(() => Object.fromEntries((d?.personas ?? []).map((p) => [p.id, p])), [d]);
+  const archivosPorServicio = useMemo(() => {
+    const m = {};
+    (d?.archivosServicio ?? []).forEach((a) => { (m[a.servicio_id] ??= []).push(a); });
+    return m;
+  }, [d]);
 
   async function verDoc(path) {
     const url = await urlFirmada(path);
@@ -277,6 +297,19 @@ export default function MiUnidad() {
                 { key: 'tipo', header: 'Tipo', nowrap: true,
                   render: (s) => <Badge color={s.tipo === 'preventivo' ? 'var(--series-1)' : 'var(--serious)'}>{s.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}</Badge> },
                 { key: 'km', header: 'Km', align: 'right', render: (s) => s.km ? Number(s.km).toLocaleString('es-MX') : '—' },
+                { key: 'archivos', header: '', nowrap: true, render: (s) => {
+                    const archivos = archivosPorServicio[s.id] ?? [];
+                    if (!archivos.length) return null;
+                    return (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {archivos.map((a, i) => (
+                          <button key={a.id} onClick={() => verDoc(a.archivo_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                            Archivo {archivos.length > 1 ? i + 1 : ''}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  } },
               ]}
               filas={d.servicios}
             />
@@ -307,6 +340,8 @@ export default function MiUnidad() {
           </div>
         </Card>
       </div>
+
+      <BitacoraVehiculo bitacora={d.bitacora} personaById={personaById} />
     </div>
   );
 }

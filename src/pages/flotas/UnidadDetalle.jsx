@@ -7,6 +7,7 @@ import { subirArchivo, borrarArchivo, urlFirmada } from '../../lib/storage';
 import FotoFirmada from '../../components/FotoFirmada';
 import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import { FotoOPdfInput } from '../../components/FotoInput';
+import BitacoraVehiculo from '../../components/BitacoraVehiculo';
 import {
   ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
   categoriaTicketDe, combinarTicketsYSolicitudes,
@@ -44,7 +45,7 @@ const DOC_VACIO = { tipo: '', referencia: '', emision: '', vence: '', monto: '',
 const SERV_VACIO = {
   fecha: hoyISO(), tipo: 'preventivo', concepto: '', taller: '', km: '',
   mano_obra: '', refacciones: '', descripcion: '',
-  proximo_servicio_km: '', proximo_servicio_fecha: '',
+  proximo_servicio_km: '', proximo_servicio_fecha: '', archivos: [],
 };
 
 export default function UnidadDetalle() {
@@ -78,6 +79,7 @@ export default function UnidadDetalle() {
 
   const [modalServ, setModalServ] = useState(false);
   const [formServ, setFormServ] = useState(SERV_VACIO);
+  const [archivoServTemp, setArchivoServTemp] = useState(null);
 
   async function cargar() {
     const [v, s, docs, servs, hist, insp, bit, per, tix, sol] = await Promise.all([
@@ -107,10 +109,19 @@ export default function UnidadDetalle() {
     const err = v.error || s.error || docs.error || servs.error || hist.error || insp.error || bit.error || per.error || tix.error || sol.error;
     if (err) { setError(err.message); return; }
     if (!v.data) { setError('no-existe'); return; }
+
+    let archivosServicio = [];
+    const servicioIds = servs.data.map((x) => x.id);
+    if (servicioIds.length) {
+      const sa = await supabase.from('flota_servicio_archivos').select('id, servicio_id, archivo_path').in('servicio_id', servicioIds);
+      if (sa.error) { setError(sa.error.message); return; }
+      archivosServicio = sa.data;
+    }
+
     setD({
       vehiculo: v.data, ciudades: s.data, documentos: docs.data, servicios: servs.data,
       historialConductores: hist.data, galeria: insp.data, bitacora: bit.data, personas: per.data ?? [],
-      tickets: tix.data, solicitudes: sol.data,
+      tickets: tix.data, solicitudes: sol.data, archivosServicio,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
@@ -123,6 +134,11 @@ export default function UnidadDetalle() {
     [d],
   );
   const historialTickets = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
+  const archivosPorServicio = useMemo(() => {
+    const m = {};
+    (d?.archivosServicio ?? []).forEach((a) => { (m[a.servicio_id] ??= []).push(a); });
+    return m;
+  }, [d]);
 
   const alertas = useMemo(() => {
     if (!d) return [];
@@ -370,6 +386,7 @@ export default function UnidadDetalle() {
 
   function abrirServicio() {
     setFormServ({ ...SERV_VACIO, km: d.vehiculo.km ?? '' });
+    setArchivoServTemp(null);
     setFormError(null); setModalServ(true);
   }
 
@@ -379,15 +396,21 @@ export default function UnidadDetalle() {
     if (!formServ.concepto.trim()) return setFormError('Escribe el concepto del servicio.');
 
     setGuardando(true);
-    const { error: errServ } = await supabase.from('flota_servicios').insert({
+    const { data: servGuardado, error: errServ } = await supabase.from('flota_servicios').insert({
       vehiculo_id: Number(id),
       fecha: formServ.fecha, tipo: formServ.tipo, concepto: formServ.concepto.trim(),
       descripcion: formServ.descripcion.trim() || null, taller: formServ.taller.trim() || null,
       km: formServ.km === '' ? null : Number(formServ.km),
       mano_obra: formServ.mano_obra === '' ? 0 : Number(formServ.mano_obra),
       refacciones: formServ.refacciones === '' ? 0 : Number(formServ.refacciones),
-    });
+      registrado_por: flotaPerfil.perfil_id,
+    }).select('id').maybeSingle();
     if (errServ) { setGuardando(false); return setFormError(errServ.message); }
+
+    for (const file of formServ.archivos) {
+      const ruta = await subirArchivo(file, `flota/${id}/servicios/${servGuardado.id}`);
+      await supabase.from('flota_servicio_archivos').insert({ servicio_id: servGuardado.id, archivo_path: ruta });
+    }
 
     // igual que en la versión original: si el km del servicio es mayor, actualiza
     // el kilometraje de la unidad, y si se captura próximo servicio, lo guarda.
@@ -572,38 +595,6 @@ export default function UnidadDetalle() {
         </div>
       )}
 
-      {puedeVerEquipo && d.bitacora?.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-base font-semibold tracking-tight">Bitácora de cambios</h2>
-          <div className="space-y-2">
-            {d.bitacora.map((b) => (
-              <Card key={b.id} className="!p-3 sm:!p-4">
-                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                  <Badge color={b.accion === 'baja' ? 'var(--critical)' : b.accion === 'alta' ? 'var(--good)' : 'var(--series-1)'}>
-                    {b.accion === 'alta' ? 'Alta' : b.accion === 'baja' ? 'Baja' : 'Edición'}
-                  </Badge>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {fechaCorta(b.creado_en?.slice(0, 10))} {new Date(b.creado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                    {' · '}{personaById[b.hecho_por]?.nombre ?? 'Administrador General'}
-                  </span>
-                </div>
-                {b.accion === 'edicion' ? (
-                  <ul className="space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {diffCampos(b.antes, b.despues).map(({ campo, antes, despues }) => (
-                      <li key={campo}><strong>{campo}</strong>: {String(antes ?? '—')} → {String(despues ?? '—')}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {b.accion === 'alta' ? 'Unidad dada de alta.' : 'Unidad dada de baja.'}
-                  </p>
-                )}
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Documentos</h2>
@@ -683,12 +674,27 @@ export default function UnidadDetalle() {
                   render: (s) => <Badge color={s.tipo === 'preventivo' ? 'var(--series-1)' : 'var(--serious)'}>{s.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}</Badge> },
                 { key: 'km', header: 'Km', align: 'right', render: (s) => s.km ? Number(s.km).toLocaleString('es-MX') : '—' },
                 { key: 'total', header: 'Costo', align: 'right', render: (s) => money(Number(s.mano_obra) + Number(s.refacciones)) },
+                { key: 'archivos', header: '', nowrap: true, render: (s) => {
+                    const archivos = archivosPorServicio[s.id] ?? [];
+                    if (!archivos.length) return null;
+                    return (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {archivos.map((a, i) => (
+                          <button key={a.id} onClick={() => verDoc(a.archivo_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                            Archivo {archivos.length > 1 ? i + 1 : ''}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  } },
               ]}
               filas={d.servicios}
             />
           </div>
         </Card>
       </div>
+
+      <BitacoraVehiculo bitacora={puedeVerEquipo ? d.bitacora : []} personaById={personaById} />
 
       {/* ---------------- Editar unidad ---------------- */}
       <Modal abierto={modalEditar} onClose={() => setModalEditar(false)} titulo="Editar unidad" ancho="max-w-2xl">
@@ -835,6 +841,26 @@ export default function UnidadDetalle() {
           <Campo label="Descripción">
             <Textarea rows={2} value={formServ.descripcion} onChange={(e) => setFormServ({ ...formServ, descripcion: e.target.value })} />
           </Campo>
+          <Campo label="Archivos" hint="Factura, nota o fotos del trabajo — opcional, puedes agregar varios">
+            {formServ.archivos.length > 0 && (
+              <ul className="mb-2 space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {formServ.archivos.map((f, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <span>{f.name}</span>
+                    <button type="button"
+                            onClick={() => setFormServ({ ...formServ, archivos: formServ.archivos.filter((_, idx) => idx !== i) })}
+                            className="underline" style={{ color: 'var(--critical)' }}>
+                      Quitar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <FotoOPdfInput value={archivoServTemp} onChange={(f) => {
+              if (f) { setFormServ({ ...formServ, archivos: [...formServ.archivos, f] }); }
+              setArchivoServTemp(null);
+            }} />
+          </Campo>
           <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
             <div className="mb-2 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Próximo servicio (opcional)</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -965,30 +991,4 @@ export default function UnidadDetalle() {
       </Modal>
     </div>
   );
-}
-
-const CAMPO_IGNORADO = new Set(['id', 'creado_en']);
-const CAMPO_LABEL = {
-  codigo: 'Código', ciudad_id: 'Ciudad', marca: 'Marca', modelo: 'Modelo', anio: 'Año',
-  tipo: 'Tipo', motor: 'Motor', color: 'Color', placas: 'Placas', vin: 'VIN',
-  propiedad: 'Propiedad', estado: 'Estado', km: 'Kilometraje', valor: 'Valor',
-  conductor_nombre: 'Conductor', conductor_telefono: 'Teléfono', conductor_correo: 'Correo',
-  conductor_licencia: 'Licencia', licencia_vence: 'Vence licencia',
-  puesto: 'Puesto', departamento: 'Departamento', jefe_directo: 'Jefe directo', tipo_prestacion: 'Tipo de prestación',
-  proximo_servicio_km: 'Próximo servicio (km)', proximo_servicio_fecha: 'Próximo servicio (fecha)',
-  notas: 'Notas', cajon_pesos: 'Cajón (pesos)', cajon_litros: 'Cajón (litros)',
-};
-
-function diffCampos(antes, despues) {
-  if (!antes || !despues) return [];
-  const campos = new Set([...Object.keys(antes), ...Object.keys(despues)]);
-  const out = [];
-  campos.forEach((campo) => {
-    if (CAMPO_IGNORADO.has(campo)) return;
-    const a = antes[campo], b = despues[campo];
-    if (JSON.stringify(a) !== JSON.stringify(b)) {
-      out.push({ campo: CAMPO_LABEL[campo] || campo, antes: a, despues: b });
-    }
-  });
-  return out;
 }
