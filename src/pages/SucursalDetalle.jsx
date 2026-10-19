@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { money, pct, fechaCorta, CRITICIDAD } from '../lib/format';
 import {
   Cargando, Aviso, Badge, Stat, Progreso, Input,
-  Modal, Campo, Boton, FiltroChips,
+  Modal, Campo, Boton, FiltroChips, Card, Textarea,
 } from '../components/ui';
 import PeriodoFiltro, { rangoMensual } from '../components/PeriodoFiltro';
 
@@ -29,9 +29,15 @@ export default function SucursalDetalle() {
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
+  const [editDatos, setEditDatos] = useState(null);
+  const [guardandoDatos, setGuardandoDatos] = useState(false);
+  const [datosError, setDatosError] = useState(null);
+
   async function cargar() {
     const [s, p, g, a, c] = await Promise.all([
-      supabase.from('sucursales').select('id, codigo, nombre, ciudad, activa, notas').eq('id', id).maybeSingle(),
+      supabase.from('sucursales')
+        .select('id, codigo, nombre, ciudad, activa, notas, responsable_nombre, responsable_telefono, responsable_email, horario')
+        .eq('id', id).maybeSingle(),
       supabase.from('presupuestos')
         .select('id, anio, mes, monto_solicitado, monto_aprobado, notas')
         .eq('sucursal_id', id),
@@ -135,6 +141,35 @@ export default function SucursalDetalle() {
     cargar();
   }
 
+  function abrirEditDatos() {
+    setEditDatos({
+      ciudad: d.sucursal.ciudad ?? '',
+      responsable_nombre: d.sucursal.responsable_nombre ?? '',
+      responsable_telefono: d.sucursal.responsable_telefono ?? '',
+      responsable_email: d.sucursal.responsable_email ?? '',
+      horario: d.sucursal.horario ?? '',
+      notas: d.sucursal.notas ?? '',
+    });
+    setDatosError(null);
+  }
+
+  async function guardarDatos(e) {
+    e.preventDefault();
+    setDatosError(null);
+    setGuardandoDatos(true);
+    const { error: err } = await supabase.from('sucursales').update({
+      ciudad: editDatos.ciudad.trim() || null,
+      responsable_nombre: editDatos.responsable_nombre.trim() || null,
+      responsable_telefono: editDatos.responsable_telefono.trim() || null,
+      responsable_email: editDatos.responsable_email.trim() || null,
+      horario: editDatos.horario.trim() || null,
+      notas: editDatos.notas.trim() || null,
+    }).eq('id', id);
+    setGuardandoDatos(false);
+    if (err) return setDatosError(err.message);
+    setEditDatos(null); cargar();
+  }
+
   if (error === 'no-existe') {
     return (
       <div className="space-y-3">
@@ -184,6 +219,7 @@ export default function SucursalDetalle() {
               Editar presupuesto de {MESES_LARGO[periodo.mes - 1]}
             </Boton>
           )}
+          {esAdmin && <Boton variant="ghost" onClick={abrirEditDatos}>Editar datos</Boton>}
           {esAdmin && (
             <Boton variant={sucursal.activa ? 'danger' : 'ghost'} onClick={alternarActiva}>
               {sucursal.activa ? 'Cerrar sucursal' : 'Reabrir sucursal'}
@@ -191,6 +227,24 @@ export default function SucursalDetalle() {
           )}
         </div>
       </div>
+
+      {(sucursal.responsable_nombre || sucursal.responsable_telefono || sucursal.responsable_email || sucursal.horario) && (
+        <Card title="Contacto y horario">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            {[
+              ['Responsable', sucursal.responsable_nombre],
+              ['Teléfono', sucursal.responsable_telefono],
+              ['Correo', sucursal.responsable_email],
+              ['Horario', sucursal.horario],
+            ].filter(([, v]) => v).map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-4 border-b pb-2" style={{ borderColor: 'var(--border)' }}>
+                <dt style={{ color: 'var(--text-secondary)' }}>{k}</dt>
+                <dd className="text-right font-medium">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
 
       <PeriodoFiltro inicial={{ modo: 'mes' }} onChange={setPeriodo} />
 
@@ -314,6 +368,44 @@ export default function SucursalDetalle() {
             <div className="flex justify-end gap-2 pt-1">
               <Boton type="button" variant="ghost" onClick={() => setEditPresupuesto(null)}>Cancelar</Boton>
               <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal abierto={!!editDatos} onClose={() => setEditDatos(null)} titulo={`Editar datos — ${sucursal.nombre}`}>
+        {editDatos && (
+          <form onSubmit={guardarDatos} className="space-y-3">
+            <Campo label="Ciudad">
+              <Input value={editDatos.ciudad} onChange={(e) => setEditDatos({ ...editDatos, ciudad: e.target.value })} />
+            </Campo>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Responsable" hint="Contacto local de la sede">
+                <Input value={editDatos.responsable_nombre}
+                       onChange={(e) => setEditDatos({ ...editDatos, responsable_nombre: e.target.value })} />
+              </Campo>
+              <Campo label="Teléfono">
+                <Input value={editDatos.responsable_telefono}
+                       onChange={(e) => setEditDatos({ ...editDatos, responsable_telefono: e.target.value })} />
+              </Campo>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Correo">
+                <Input value={editDatos.responsable_email}
+                       onChange={(e) => setEditDatos({ ...editDatos, responsable_email: e.target.value })} />
+              </Campo>
+              <Campo label="Horario" hint="Ej. L-V 8:30-18:30">
+                <Input value={editDatos.horario} onChange={(e) => setEditDatos({ ...editDatos, horario: e.target.value })} />
+              </Campo>
+            </div>
+            <Campo label="Notas">
+              <Textarea rows={2} value={editDatos.notas} onChange={(e) => setEditDatos({ ...editDatos, notas: e.target.value })} />
+            </Campo>
+
+            {datosError && <Aviso tono="critical">{datosError}</Aviso>}
+            <div className="flex justify-end gap-2 pt-1">
+              <Boton type="button" variant="ghost" disabled={guardandoDatos} onClick={() => setEditDatos(null)}>Cancelar</Boton>
+              <Boton type="submit" disabled={guardandoDatos}>{guardandoDatos ? 'Guardando…' : 'Guardar'}</Boton>
             </div>
           </form>
         )}
