@@ -67,7 +67,7 @@ export default function Dashboard() {
   const [formError, setFormError] = useState(null);
 
   async function cargar() {
-    const [s, p, cc, g, o, prov, act] = await Promise.all([
+    const [s, p, cc, g, o, prov, act, sol, cfg, idx] = await Promise.all([
       supabase.from('sucursales').select('id, codigo, nombre, activa').order('codigo'),
       supabase.from('presupuestos').select('sucursal_id, anio, mes, monto_aprobado, monto_solicitado'),
       supabase.from('caja_chica').select('id, anio, monto_asignado, notas'),
@@ -75,15 +75,20 @@ export default function Dashboard() {
         .select('id, fecha, sucursal_id, tipo, unidad_pago, estatus_pago, monto, requiere_revision, orden_id, proveedor_id, concepto, creado_en, comprobante_path')
         .order('fecha', { ascending: false }),
       supabase.from('ordenes')
-        .select('id, sucursal_id, activo_id, tipo, criticidad, estatus, fecha_programada, fecha_realizada, costo_estimado, titulo, proveedor_id'),
+        .select('id, sucursal_id, activo_id, tipo, criticidad, estatus, fecha_programada, fecha_realizada, fecha_compromiso, costo_estimado, titulo, proveedor_id'),
       supabase.from('proveedores').select('id, nombre'),
       supabase.from('activos').select('id'),
+      supabase.from('solicitudes').select('id, estatus'),
+      supabase.from('mantenimiento_config').select('rezago_inicial').eq('id', 1).single(),
+      supabase.from('mantenimiento_indice_orden')
+        .select('instalaciones, documentos, portal').order('fecha', { ascending: false }).limit(1),
     ]);
-    const err = s.error || p.error || cc.error || g.error || o.error || prov.error || act.error;
+    const err = s.error || p.error || cc.error || g.error || o.error || prov.error || act.error || sol.error;
     if (err) { setError(err.message); return; }
     setDatos({
       sucursales: s.data, presupuestos: p.data, cajaChica: cc.data, gastos: g.data,
-      ordenes: o.data, proveedores: prov.data, activos: act.data,
+      ordenes: o.data, proveedores: prov.data, activos: act.data, solicitudes: sol.data,
+      config: cfg.data, indiceOrden: idx.data?.[0] ?? null,
     });
   }
   useEffect(() => { cargar(); }, []);
@@ -93,7 +98,7 @@ export default function Dashboard() {
 
   const m = useMemo(() => {
     if (!datos || !periodo) return null;
-    const { sucursales, presupuestos, cajaChica, gastos, ordenes, activos } = datos;
+    const { sucursales, presupuestos, cajaChica, gastos, ordenes, activos, solicitudes } = datos;
     const { desde, hasta } = periodo;
     const hoy = hoyISO();
 
@@ -175,6 +180,50 @@ export default function Dashboard() {
       .map((o) => ({ ...o, costoReal: costoRealPorOrden[o.id] || 0 }));
     const pendientes = ordenes.filter((o) => ['programada', 'en_proceso', 'pospuesta'].includes(o.estatus));
 
+    // --------- KPIs ejecutivos del plan de 90 dias (5 de los 6 -- "ahorro
+    // validado" se deja fuera, necesita una base de precio que hoy no se
+    // guarda en ningun lado) ---------
+
+    // Cumplimiento preventivo: de los preventivos programados en el
+    // periodo, cuantos se realizaron a tiempo (on/antes de su propia
+    // fecha programada).
+    const preventivosProgramados = ordenes.filter((o) =>
+      o.tipo === 'preventivo' && o.fecha_programada >= desde && o.fecha_programada <= hasta);
+    const preventivosATiempo = preventivosProgramados.filter((o) =>
+      o.estatus === 'realizada' && o.fecha_realizada && o.fecha_realizada <= o.fecha_programada);
+    const kpiPreventivo = preventivosProgramados.length > 0
+      ? (preventivosATiempo.length / preventivosProgramados.length) * 100 : null;
+
+    // Cumplimiento de atencion: de las ordenes cerradas en el periodo
+    // que tenian fecha compromiso (SLA por prioridad), cuantas se
+    // cerraron dentro de ese plazo.
+    const cerradasConCompromiso = realizados.filter((o) => o.fecha_compromiso);
+    const atencionATiempo = cerradasConCompromiso.filter((o) => o.fecha_realizada <= o.fecha_compromiso);
+    const kpiAtencion = cerradasConCompromiso.length > 0
+      ? (atencionATiempo.length / cerradasConCompromiso.length) * 100 : null;
+
+    // Reduccion del rezago: necesita el "rezago inicial" capturado a
+    // mano en Configuracion (dia 0 del plan) -- nadie puede calcular
+    // solo cuantos pendientes habia al arrancar. El rezago actual si se
+    // calcula: solicitudes sin resolver + ordenes sin cerrar, estado
+    // de HOY, no depende del periodo elegido en el filtro.
+    const rezagoActual =
+      solicitudes.filter((s) => ['nueva', 'en_revision', 'informacion_requerida'].includes(s.estatus)).length +
+      ordenes.filter((o) => !['realizada', 'cancelada'].includes(o.estatus)).length;
+    const rezagoInicial = datos.config?.rezago_inicial ?? null;
+    const kpiRezago = rezagoInicial ? ((rezagoInicial - rezagoActual) / rezagoInicial) * 100 : null;
+
+    // Control presupuestal: que tanto se desvia el gasto real del
+    // presupuesto (ya calculado arriba como avancePresupuesto, aqui
+    // nada mas se re-expresa como desviacion +/-).
+    const kpiPresupuestal = presupuestoTotal > 0
+      ? ((presupuestoConsumido - presupuestoTotal) / presupuestoTotal) * 100 : null;
+
+    // Indice de orden: ultima medicion manual capturada en
+    // Configuracion (instalaciones 40% + documentos 30% + portal 30%).
+    const io = datos.indiceOrden;
+    const kpiIndiceOrden = io ? (Number(io.instalaciones) * 0.4 + Number(io.documentos) * 0.3 + Number(io.portal) * 0.3) : null;
+
     return {
       presupuestoTotal, presupuestoConsumido, presupuestoDisponible: presupuestoTotal - presupuestoConsumido,
       avancePresupuesto: presupuestoTotal > 0 ? (presupuestoConsumido / presupuestoTotal) * 100 : null,
@@ -191,6 +240,7 @@ export default function Dashboard() {
       totalMovimientos: enPeriodo.length,
       activosTotal: activos.length, activosEnCurso: enCurso, activosAtrasados: atrasados, activosProximos: proximos,
       realizados, pendientes,
+      kpiPreventivo, kpiAtencion, kpiRezago, kpiPresupuestal, kpiIndiceOrden, rezagoActual, rezagoInicial,
     };
   }, [datos, periodo]);
 
@@ -311,6 +361,26 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* ---------------- KPIs ejecutivos (Plan de 90 días) ---------------- */}
+      <div>
+        <h2 className="mb-2 text-base font-semibold tracking-tight">KPIs ejecutivos</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Stat label="Cumplimiento preventivo" value={m.kpiPreventivo === null ? 'Sin datos' : pct(m.kpiPreventivo, 0)}
+                hint="Meta ≥90%" tone={m.kpiPreventivo === null ? undefined : m.kpiPreventivo >= 90 ? 'good' : 'critical'} />
+          <Stat label="Cumplimiento de atención" value={m.kpiAtencion === null ? 'Sin datos' : pct(m.kpiAtencion, 0)}
+                hint="Meta ≥90%" tone={m.kpiAtencion === null ? undefined : m.kpiAtencion >= 90 ? 'good' : 'critical'} />
+          <Stat label="Reducción de rezago"
+                value={m.kpiRezago === null ? 'Sin capturar' : pct(m.kpiRezago, 0)}
+                hint={m.kpiRezago === null ? `${m.rezagoActual} pendientes hoy — captura el rezago inicial en Configuración` : `Meta ≥60% · ${m.rezagoActual} pendientes hoy`}
+                tone={m.kpiRezago === null ? undefined : m.kpiRezago >= 60 ? 'good' : 'critical'} />
+          <Stat label="Control presupuestal" value={m.kpiPresupuestal === null ? 'Sin datos' : `${m.kpiPresupuestal > 0 ? '+' : ''}${pct(m.kpiPresupuestal, 0)}`}
+                hint="Meta ±5%" tone={m.kpiPresupuestal === null ? undefined : Math.abs(m.kpiPresupuestal) <= 5 ? 'good' : 'critical'} />
+          <Stat label="Índice de orden" value={m.kpiIndiceOrden === null ? 'Sin capturar' : `${m.kpiIndiceOrden.toFixed(1)}%`}
+                hint={m.kpiIndiceOrden === null ? 'Captúralo en Configuración' : 'Meta ≥90% · captura manual'}
+                tone={m.kpiIndiceOrden === null ? undefined : m.kpiIndiceOrden >= 90 ? 'good' : 'critical'} />
+        </div>
+      </div>
 
       {/* ---------------- Activos ---------------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
