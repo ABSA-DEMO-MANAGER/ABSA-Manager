@@ -109,3 +109,10 @@ export const COBERTURA = {
   regional: 'Regional',
   nacional: 'Nacional',
 };
+
+export const TIPO_DOCUMENTO_PROVEEDOR = {
+  cfdi: 'CFDI',
+  contrato: 'Contrato',
+  identificacion: 'Identificación',
+  otro: 'Otro',
+};

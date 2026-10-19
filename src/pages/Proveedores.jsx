@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { fechaCorta, COBERTURA } from '../lib/format';
@@ -6,10 +7,11 @@ import {
   Card, Tabla, Input, Select, Cargando, Aviso, Badge, Boton, Modal, Campo, Textarea, FiltroChips,
 } from '../components/ui';
 
-const FORM_VACIO = { nombre: '', servicio: '', ciudad: '', cobertura: '', contacto: '', telefono: '', notas: '' };
+const FORM_VACIO = { nombre: '', servicio: '', ciudad: '', cobertura: '', factura: '', contacto: '', telefono: '', notas: '' };
 
 export default function Proveedores() {
   const { perfil, esAdmin, puedeGestionar } = useAuth();
+  const navigate = useNavigate();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [busca, setBusca] = useState('');
@@ -17,14 +19,13 @@ export default function Proveedores() {
   const [vista, setVista] = useState('lista'); // lista | pendientes
 
   const [modal, setModal] = useState(false);
-  const [editando, setEditando] = useState(null); // proveedor actual si es edicion
   const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
   async function cargar() {
     const [p, cambios, perfiles] = await Promise.all([
-      supabase.from('proveedores').select('id, nombre, servicio, es_fijo, ciudad, cobertura, contacto, telefono, notas').order('nombre'),
+      supabase.from('proveedores').select('id, nombre, servicio, es_fijo, ciudad, cobertura, factura, contacto, telefono, notas').order('nombre'),
       supabase.from('proveedores_cambios')
         .select('id, proveedor_id, datos, estatus, solicitado_por, solicitado_en, resuelto_por, resuelto_en')
         .order('solicitado_en', { ascending: false }),
@@ -58,17 +59,7 @@ export default function Proveedores() {
   }, [d, busca, fCobertura]);
 
   function abrirNuevo() {
-    setEditando(null);
     setForm(FORM_VACIO);
-    setFormError(null); setModal(true);
-  }
-
-  function abrirEditar(p) {
-    setEditando(p);
-    setForm({
-      nombre: p.nombre, servicio: p.servicio ?? '', ciudad: p.ciudad ?? '', cobertura: p.cobertura ?? '',
-      contacto: p.contacto ?? '', telefono: p.telefono ?? '', notas: p.notas ?? '',
-    });
     setFormError(null); setModal(true);
   }
 
@@ -82,22 +73,15 @@ export default function Proveedores() {
       servicio: form.servicio.trim() || null,
       ciudad: form.ciudad.trim() || null,
       cobertura: form.cobertura || null,
+      factura: form.factura === '' ? null : form.factura === 'si',
       contacto: form.contacto.trim() || null,
       telefono: form.telefono.trim() || null,
       notas: form.notas.trim() || null,
     };
 
     setGuardando(true);
-    let err;
-    if (!editando) {
-      // Alta: libre para admin y usuario
-      ({ error: err } = await supabase.from('proveedores').insert(datos));
-    } else if (esAdmin) {
-      ({ error: err } = await supabase.from('proveedores').update(datos).eq('id', editando.id));
-    } else {
-      ({ error: err } = await supabase.from('proveedores_cambios')
-        .insert({ proveedor_id: editando.id, datos, solicitado_por: perfil.id }));
-    }
+    // Alta: libre para admin y usuario
+    const { error: err } = await supabase.from('proveedores').insert(datos);
     setGuardando(false);
     if (err) return setFormError(err.message.includes('duplicate') ? 'Ya existe un proveedor con ese nombre.' : err.message);
     setModal(false); cargar();
@@ -158,7 +142,7 @@ export default function Proveedores() {
             <FiltroChips opciones={opcionesCobertura} valor={fCobertura} onChange={setFCobertura} todasLabel="Todas las coberturas" />
           </div>
           <Tabla
-            onRowClick={puedeGestionar ? abrirEditar : undefined}
+            onRowClick={(p) => navigate(`/mantenimiento/proveedores/${p.id}`)}
             vacio="Ningún proveedor coincide con el filtro."
             columnas={[
               { key: 'nombre', header: 'Nombre', render: (p) => (
@@ -170,6 +154,8 @@ export default function Proveedores() {
               { key: 'ciudad', header: 'Ciudad', nowrap: true, render: (p) => p.ciudad ?? '—' },
               { key: 'cobertura', header: 'Cobertura', nowrap: true,
                 render: (p) => p.cobertura ? <Badge dot={false}>{COBERTURA[p.cobertura]}</Badge> : '—' },
+              { key: 'factura', header: 'Factura', nowrap: true, render: (p) => (
+                  p.factura === null ? '—' : <Badge dot={false}>{p.factura ? 'Sí' : 'No'}</Badge>) },
               { key: 'contacto', header: 'Contacto', render: (p) => p.contacto ?? '—' },
               { key: 'telefono', header: 'Teléfono', nowrap: true, render: (p) => p.telefono ?? '—' },
             ]}
@@ -202,8 +188,7 @@ export default function Proveedores() {
         </Card>
       )}
 
-      <Modal abierto={modal} onClose={() => setModal(false)}
-             titulo={!editando ? 'Nuevo proveedor' : esAdmin ? 'Editar proveedor' : 'Proponer cambio de proveedor'}>
+      <Modal abierto={modal} onClose={() => setModal(false)} titulo="Nuevo proveedor">
         <form onSubmit={guardar} className="space-y-3">
           <Campo label="Nombre" required>
             <Input value={form.nombre} required onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
@@ -222,6 +207,13 @@ export default function Proveedores() {
               </Select>
             </Campo>
           </div>
+          <Campo label="¿Factura?">
+            <Select value={form.factura} onChange={(e) => setForm({ ...form, factura: e.target.value })}>
+              <option value="">Sin especificar</option>
+              <option value="si">Sí factura</option>
+              <option value="no">No factura</option>
+            </Select>
+          </Campo>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Contacto">
               <Input value={form.contacto} onChange={(e) => setForm({ ...form, contacto: e.target.value })} />
@@ -237,9 +229,7 @@ export default function Proveedores() {
           {formError && <Aviso tono="critical">{formError}</Aviso>}
           <div className="flex justify-end gap-2 pt-1">
             <Boton type="button" variant="ghost" onClick={() => setModal(false)}>Cancelar</Boton>
-            <Boton type="submit" disabled={guardando}>
-              {guardando ? 'Guardando…' : !editando || esAdmin ? 'Guardar' : 'Enviar para aprobación'}
-            </Boton>
+            <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
           </div>
         </form>
       </Modal>

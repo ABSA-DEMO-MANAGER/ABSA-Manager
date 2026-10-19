@@ -15,6 +15,7 @@ import SucursalDetalle from './pages/SucursalDetalle';
 import Usuarios from './pages/Usuarios';
 import Configuracion from './pages/Configuracion';
 import Proveedores from './pages/Proveedores';
+import ProveedorDetalle from './pages/ProveedorDetalle';
 import FlotasLayout from './pages/flotas/FlotasLayout';
 import InicioFlotas from './pages/flotas/InicioFlotas';
 import MiUnidad from './pages/flotas/MiUnidad';
@@ -57,6 +58,7 @@ function Rutas() {
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="configuracion" element={<Configuracion />} />
         <Route path="proveedores" element={<Proveedores />} />
+        <Route path="proveedores/:id" element={<ProveedorDetalle />} />
         <Route path="*" element={<Dashboard />} />
       </Route>
 

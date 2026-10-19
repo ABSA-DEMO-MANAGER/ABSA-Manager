@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { subirArchivo, urlFirmada } from '../lib/storage';
+import { subirArchivo, urlFirmada, borrarArchivo } from '../lib/storage';
 import SelectorProveedor from '../components/SelectorProveedor';
 import { FotoInput } from '../components/FotoInput';
+import FotoFirmada from '../components/FotoFirmada';
+import CamaraCaptura from '../components/CamaraCaptura';
 import { useAuth } from '../lib/auth';
 import { money, fechaCorta, hoyISO, TIPOS, CRITICIDAD, ESTADO_ACTIVO, ESTATUS_ORDEN } from '../lib/format';
 import {
@@ -21,6 +23,8 @@ const FORM_MANT_VACIO = {
   criticidad: 'B', fecha_programada: hoyISO(), costo_estimado: '',
   duracion_estimada_horas: '', proveedor_id: '',
 };
+
+const MAX_FOTOS_GALERIA = 3;
 
 export default function ActivoDetalle() {
   const { id } = useParams();
@@ -40,8 +44,11 @@ export default function ActivoDetalle() {
   const [formEditar, setFormEditar] = useState(null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
 
+  const [camaraAbierta, setCamaraAbierta] = useState(false);
+  const [subiendoGaleria, setSubiendoGaleria] = useState(false);
+
   async function cargar() {
-    const [a, s, c, o, prov, cambios, perfiles] = await Promise.all([
+    const [a, s, c, o, prov, cambios, perfiles, fotos] = await Promise.all([
       supabase.from('activos')
         .select('id, sucursal_id, categoria_id, codigo, nombre, ubicacion, tipo, marca, modelo, serie, capacidad, criticidad, estado, ultimo_servicio, fecha_instalacion, atributos, notas, foto_path')
         .eq('id', id).maybeSingle(),
@@ -55,8 +62,9 @@ export default function ActivoDetalle() {
         .select('id, tipo, datos, estatus, solicitado_por, solicitado_en, resuelto_por, resuelto_en, nota_resolucion')
         .eq('activo_id', id).order('solicitado_en', { ascending: false }),
       supabase.from('perfiles').select('id, nombre'),
+      supabase.from('activos_fotos').select('id, archivo_path').eq('activo_id', id).order('creado_en'),
     ]);
-    const err = a.error || s.error || c.error || o.error || prov.error || cambios.error || perfiles.error;
+    const err = a.error || s.error || c.error || o.error || prov.error || cambios.error || perfiles.error || fotos.error;
     if (err) { setError(err.message); return; }
     if (!a.data) { setError('no-existe'); return; }
 
@@ -72,7 +80,7 @@ export default function ActivoDetalle() {
 
     setD({
       activo: a.data, sucursales: s.data, categorias: c.data, ordenes: o.data, proveedores: prov.data, gastos,
-      cambios: cambios.data, perfiles: perfiles.data,
+      cambios: cambios.data, perfiles: perfiles.data, fotos: fotos.data,
     });
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [id]);
@@ -226,6 +234,30 @@ export default function ActivoDetalle() {
     else alert('No se pudo abrir el archivo.');
   }
 
+  // ------------------------------------------------------------ galeria
+  async function agregarFotoGaleria(archivo) {
+    setSubiendoGaleria(true);
+    try {
+      const ruta = await subirArchivo(archivo, `activos/${d.activo.id}/galeria`);
+      const { error: err } = await supabase.from('activos_fotos')
+        .insert({ activo_id: d.activo.id, archivo_path: ruta, creado_por: perfil.id });
+      if (err) throw err;
+      setCamaraAbierta(false);
+      cargar();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSubiendoGaleria(false);
+    }
+  }
+
+  async function quitarFotoGaleria(foto) {
+    if (!confirm('¿Quitar esta foto de la galería?')) return;
+    await supabase.from('activos_fotos').delete().eq('id', foto.id);
+    await borrarArchivo(foto.archivo_path);
+    cargar();
+  }
+
   if (error === 'no-existe') {
     return (
       <div className="space-y-3">
@@ -317,6 +349,39 @@ export default function ActivoDetalle() {
           <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>{activo.notas}</p>
         )}
       </Card>
+
+      <div>
+        <h2 className="mb-2 text-base font-semibold tracking-tight">Fotos</h2>
+        <Card>
+          <div className="flex flex-wrap gap-3">
+            {d.fotos.map((f) => (
+              <div key={f.id} className="relative">
+                <FotoFirmada path={f.archivo_path} alt="" className="h-24 w-24" />
+                {puedeGestionar && (
+                  <button type="button" onClick={() => quitarFotoGaleria(f)}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-xs text-white"
+                          style={{ background: 'var(--critical)' }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {puedeGestionar && d.fotos.length < MAX_FOTOS_GALERIA && (
+              <button type="button" onClick={() => setCamaraAbierta(true)} disabled={subiendoGaleria}
+                      className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-xs"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                <span aria-hidden="true">📷</span>
+                {subiendoGaleria ? 'Subiendo…' : 'Agregar'}
+              </button>
+            )}
+            {d.fotos.length === 0 && !puedeGestionar && (
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin fotos.</p>
+            )}
+          </div>
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>Hasta {MAX_FOTOS_GALERIA} fotos.</p>
+        </Card>
+        <CamaraCaptura abierto={camaraAbierta} onCerrar={() => setCamaraAbierta(false)} onCapturar={agregarFotoGaleria} />
+      </div>
 
       <div>
         <h2 className="mb-2 text-base font-semibold tracking-tight">Mantenimientos</h2>
