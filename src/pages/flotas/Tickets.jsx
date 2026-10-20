@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { subirArchivo, urlFirmada } from '../../lib/storage';
@@ -69,6 +70,7 @@ function mailtoDecision({ sol, decision, motivoRechazo, vehLabel, personaById, c
 
 export default function Tickets() {
   const { flotaPerfil, esFlotaAdmin, esAdminGasolina, puedeGestionarGasolina, puedeVerEquipo } = useFlotaPerfil();
+  const [params] = useSearchParams();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [fGrupo, setFGrupo] = useState('');
@@ -106,6 +108,17 @@ export default function Tickets() {
     });
   }
   useEffect(() => { cargar(); }, []);
+
+  // Llegando desde "+ Nuevo ticket" en la ficha de una unidad
+  // (UnidadDetalle.jsx) -- abre el modal ya con esa unidad elegida.
+  useEffect(() => {
+    const vehiculoId = params.get('vehiculo');
+    if (vehiculoId) {
+      setForm({ ...FORM_VACIO, vehiculo_id: vehiculoId });
+      setFormError(null); setModal(true);
+    }
+    // eslint-disable-next-line
+  }, []);
 
   const vehById = useMemo(() => Object.fromEntries((d?.vehiculos ?? []).map((v) => [v.id, v])), [d]);
   const personaById = useMemo(() => Object.fromEntries((d?.personas ?? []).map((p) => [p.id, p])), [d]);

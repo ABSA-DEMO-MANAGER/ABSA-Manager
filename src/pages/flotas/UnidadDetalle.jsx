@@ -663,7 +663,14 @@ export default function UnidadDetalle() {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-semibold tracking-tight">Historial de tickets</h2>
-          <Link to="/flotas/tickets" className="text-xs underline" style={{ color: 'var(--series-1)' }}>Ver todos</Link>
+          <div className="flex items-center gap-3">
+            {esFlotaAdmin && (
+              <button onClick={() => navigate(`/flotas/tickets?vehiculo=${id}`)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                + Nuevo ticket
+              </button>
+            )}
+            <Link to="/flotas/tickets" className="text-xs underline" style={{ color: 'var(--series-1)' }}>Ver todos</Link>
+          </div>
         </div>
         <Card className="!p-0">
           <div className="p-4 sm:p-5">
