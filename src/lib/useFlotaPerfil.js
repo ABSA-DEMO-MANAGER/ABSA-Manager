@@ -52,11 +52,22 @@ export function useFlotaPerfil() {
     return () => { vivo = false; };
   }, [sesion]);
 
-  const esFlotaAdmin = flotaPerfil?.rol === 'admin';   // Administrador General
-  const esDirector = flotaPerfil?.rol === 'director';
-  const esGerente = flotaPerfil?.rol === 'gerente';
-  const puedeVerEquipo = ['admin', 'director', 'gerente'].includes(flotaPerfil?.rol);
-  const aprobado = !!flotaPerfil && ['admin', 'director', 'gerente', 'usuario'].includes(flotaPerfil.rol);
+  const rol = flotaPerfil?.rol;
+  const esAdminGeneral = rol === 'admin';
+  const esAdminFlotas = rol === 'admin_flotas';
+  const esAdminGasolina = rol === 'admin_gasolina';
+  // "Todo menos autorizar cargas/tickets de gasolina" -- casi toda la app ya
+  // usa esFlotaAdmin para mostrar sus botones de administracion; con que
+  // admin_flotas quede incluido aqui, esas pantallas funcionan solas para
+  // ese rol sin tocarles una linea.
+  const esFlotaAdmin = ['admin', 'admin_flotas'].includes(rol);
+  const puedeGestionarGasolina = ['admin', 'admin_gasolina'].includes(rol);
+  const puedeVerEquipo = ['admin', 'admin_flotas', 'gerente'].includes(rol);
+  const aprobado = !!flotaPerfil && ['admin', 'admin_flotas', 'admin_gasolina', 'gerente', 'usuario'].includes(rol);
 
-  return { flotaPerfil, cargando, esFlotaAdmin, esDirector, esGerente, puedeVerEquipo, aprobado, error };
+  return {
+    flotaPerfil, cargando, error,
+    esFlotaAdmin, esAdminGeneral, esAdminFlotas, esAdminGasolina,
+    puedeGestionarGasolina, puedeVerEquipo, aprobado,
+  };
 }

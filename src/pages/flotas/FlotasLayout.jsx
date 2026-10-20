@@ -1,16 +1,24 @@
 import { Link } from 'react-router-dom';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
+import { ROLES_FLOTA } from '../../lib/rolesFlotas';
 import AppShell from '../../components/AppShell';
 import { Cargando, Aviso } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
-
-const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 
 function navPara(rol) {
   if (rol === 'usuario') {
     return [
       { to: '/flotas', label: 'Mi unidad', icono: '🚚', end: true },
       { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+    ];
+  }
+  // Administrador Gasolina: solo su carril -- gasolina/tags y el modulo de
+  // Combustible, nada del resto (Unidades, Tablero, Siniestros, Costos...).
+  if (rol === 'admin_gasolina') {
+    return [
+      { to: '/flotas', label: 'Mi unidad', icono: '🚙', end: true },
+      { to: '/flotas/tickets', label: 'Tickets', icono: '☑' },
+      { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
     ];
   }
   const nav = [
@@ -22,7 +30,7 @@ function navPara(rol) {
     { to: '/flotas/combustible', label: 'Combustible', icono: '⛽' },
     { to: '/flotas/tablero', label: 'Tablero', icono: '📊' },
   ];
-  if (rol === 'admin') {
+  if (rol === 'admin' || rol === 'admin_flotas') {
     nav.push(
       { to: '/flotas/carga', label: 'Carga masiva', icono: '⇪' },
       { to: '/flotas/usuarios', label: 'Usuarios', icono: '☺' },
@@ -81,6 +89,6 @@ export default function FlotasLayout() {
 
   return (
     <AppShell appLabel="Flotas" appIcono="🚚" appSub="Gestión de activos"
-              nav={navPara(flotaPerfil.rol)} rolLabel={ROLES[flotaPerfil.rol]} />
+              nav={navPara(flotaPerfil.rol)} rolLabel={ROLES_FLOTA[flotaPerfil.rol]} />
   );
 }

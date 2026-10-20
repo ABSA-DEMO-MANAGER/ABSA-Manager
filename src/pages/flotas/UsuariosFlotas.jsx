@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { fechaCorta } from '../../lib/format';
+import { ROLES_FLOTA } from '../../lib/rolesFlotas';
 import { Card, Tabla, Cargando, Aviso, Select } from '../../components/ui';
-
-const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 
 export default function UsuariosFlotas() {
   const { flotaPerfil } = useFlotaPerfil();
@@ -37,12 +36,13 @@ export default function UsuariosFlotas() {
   }
 
   const posiblesSupervisores = useMemo(
-    () => (usuarios ?? []).filter((u) => ['admin', 'director', 'gerente'].includes(u.rol)),
+    () => (usuarios ?? []).filter((u) => ['admin', 'admin_flotas', 'gerente'].includes(u.rol)),
     [usuarios],
   );
 
   async function cambiarRol(u, rol) {
-    if (u.id === flotaPerfil?.perfil_id && rol !== 'admin') {
+    const eraAdmin = ['admin', 'admin_flotas'].includes(u.rol);
+    if (u.id === flotaPerfil?.perfil_id && eraAdmin && !['admin', 'admin_flotas'].includes(rol)) {
       if (!confirm('Vas a quitarte a ti mismo el rol de administrador de Flotas. ¿Seguro?')) return;
     }
     setCambiando(u.id);
@@ -75,10 +75,11 @@ export default function UsuariosFlotas() {
       </div>
 
       <Aviso>
-        <strong>Administrador General</strong>: todo, incluye editar unidades y ver la bitácora. ·{' '}
-        <strong>Director</strong> y <strong>Gerente</strong>: lo mismo que Usuario, más el costo y las
-        solicitudes de su propio equipo (definido por "Supervisor" abajo). · <strong>Usuario</strong>: solo su
-        propia unidad. · <strong>Pendiente</strong>: sin acceso todavía.
+        <strong>Administrador General</strong>: todo. · <strong>Administrador Flotas</strong>: todo menos
+        autorizar cargas/tickets de gasolina. · <strong>Administrador Gasolina</strong>: solo tickets de
+        gasolina/tag y el módulo de Combustible. · <strong>Gerente</strong>: lo mismo que Usuario, más el costo
+        y las solicitudes de su propio equipo (definido por "Supervisor" abajo). · <strong>Usuario</strong>:
+        solo su propia unidad. · <strong>Pendiente</strong>: sin acceso todavía.
       </Aviso>
 
       <Card>
@@ -99,7 +100,7 @@ export default function UsuariosFlotas() {
                   <select value={u.rol} onChange={(e) => cambiarRol(u, e.target.value)}
                           className="rounded-lg border px-2 py-1 text-xs"
                           style={{ background: 'var(--plane)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-                    {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    {Object.entries(ROLES_FLOTA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 )) },
             { key: 'supervisor', header: 'Supervisor', nowrap: true, render: (u) => (
@@ -108,7 +109,7 @@ export default function UsuariosFlotas() {
                           className="!w-auto !py-1 text-xs">
                     <option value="">Sin asignar</option>
                     {posiblesSupervisores.filter((s) => s.id !== u.id).map((s) => (
-                      <option key={s.id} value={s.id}>{s.nombre} · {ROLES[s.rol]}</option>
+                      <option key={s.id} value={s.id}>{s.nombre} · {ROLES_FLOTA[s.rol]}</option>
                     ))}
                   </Select>
                 )) },

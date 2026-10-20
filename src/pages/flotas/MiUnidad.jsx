@@ -94,7 +94,7 @@ export default function MiUnidad() {
         .select('id, folio, motivo, litros_solicitados, monto_estimado, monto_solicitado, estatus, motivo_rechazo, creado_en')
         .eq('vehiculo_id', vehiculoId).order('creado_en', { ascending: false }).limit(10),
       supabase.from('flota_servicios')
-        .select('id, fecha, tipo, concepto, taller, km, mano_obra, refacciones')
+        .select('id, fecha, tipo, concepto, taller, km, mano_obra, refacciones, estatus')
         .eq('vehiculo_id', vehiculoId).order('fecha', { ascending: false }).limit(10),
       supabase.from('flota_siniestros')
         .select('id, folio, tipo, clasificacion, fecha, estatus, monto')
@@ -291,7 +291,10 @@ export default function MiUnidad() {
                 { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta(s.fecha) },
                 { key: 'concepto', header: 'Concepto', render: (s) => (
                     <div>
-                      <div>{s.concepto}</div>
+                      <div>
+                        {s.concepto}
+                        {s.estatus === 'abierto' && <Badge color="var(--serious)">En proceso</Badge>}
+                      </div>
                       {s.taller && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.taller}</div>}
                     </div>) },
                 { key: 'tipo', header: 'Tipo', nowrap: true,

@@ -8,6 +8,7 @@ import FotoFirmada from '../../components/FotoFirmada';
 import ChecklistFotos, { fotosVaciasUnidad, cuentaFotosUnidad } from '../../components/ChecklistFotos';
 import { FotoOPdfInput } from '../../components/FotoInput';
 import BitacoraVehiculo from '../../components/BitacoraVehiculo';
+import { ROLES_FLOTA } from '../../lib/rolesFlotas';
 import {
   ESTATUS_TICKET, COLOR_TICKET, ESTATUS_SOLICITUD, COLOR_SOLICITUD,
   categoriaTicketDe, combinarTicketsYSolicitudes,
@@ -20,7 +21,6 @@ import {
 const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
 
-const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 const conductorVacio = () => ({ persona_id: '', supervisor_id: '' });
 const fotosVacias = fotosVaciasUnidad;
 const cuentaFotos = cuentaFotosUnidad;
@@ -87,7 +87,7 @@ export default function UnidadDetalle() {
       supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
       supabase.from('flota_documentos').select('id, tipo, referencia, emision, vence, monto, archivo_path').eq('vehiculo_id', id).order('vence'),
       supabase.from('flota_servicios')
-        .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones')
+        .select('id, fecha, tipo, concepto, descripcion, taller, km, mano_obra, refacciones, estatus, ticket_id')
         .eq('vehiculo_id', id).order('fecha', { ascending: false }),
       supabase.from('flota_conductor_historial')
         .select('id, conductor_nombre, conductor_telefono, puesto, departamento, jefe_directo, tipo_prestacion, hasta')
@@ -130,10 +130,11 @@ export default function UnidadDetalle() {
   const personaById = useMemo(() => Object.fromEntries((d?.personas ?? []).map((p) => [p.id, p])), [d]);
   const personasAsignables = useMemo(() => (d?.personas ?? []).filter((p) => p.rol !== 'pendiente'), [d]);
   const posiblesGerentes = useMemo(
-    () => (d?.personas ?? []).filter((p) => ['admin', 'director', 'gerente'].includes(p.rol)),
+    () => (d?.personas ?? []).filter((p) => ['admin', 'admin_flotas', 'gerente'].includes(p.rol)),
     [d],
   );
   const historialTickets = useMemo(() => (d ? combinarTicketsYSolicitudes(d.tickets, d.solicitudes) : []), [d]);
+  const ticketById = useMemo(() => Object.fromEntries((d?.tickets ?? []).map((t) => [t.id, t])), [d]);
   const archivosPorServicio = useMemo(() => {
     const m = {};
     (d?.archivosServicio ?? []).forEach((a) => { (m[a.servicio_id] ??= []).push(a); });
@@ -385,7 +386,17 @@ export default function UnidadDetalle() {
   }
 
   function abrirServicio() {
-    setFormServ({ ...SERV_VACIO, km: d.vehiculo.km ?? '' });
+    setFormServ({ ...SERV_VACIO, id: null, km: d.vehiculo.km ?? '' });
+    setArchivoServTemp(null);
+    setFormError(null); setModalServ(true);
+  }
+
+  function abrirEditarServicio(s) {
+    setFormServ({
+      id: s.id, fecha: s.fecha, tipo: s.tipo, concepto: s.concepto, taller: s.taller ?? '',
+      km: s.km ?? '', mano_obra: s.mano_obra ?? '', refacciones: s.refacciones ?? '',
+      descripcion: s.descripcion ?? '', proximo_servicio_km: '', proximo_servicio_fecha: '', archivos: [],
+    });
     setArchivoServTemp(null);
     setFormError(null); setModalServ(true);
   }
@@ -396,15 +407,18 @@ export default function UnidadDetalle() {
     if (!formServ.concepto.trim()) return setFormError('Escribe el concepto del servicio.');
 
     setGuardando(true);
-    const { data: servGuardado, error: errServ } = await supabase.from('flota_servicios').insert({
-      vehiculo_id: Number(id),
+    const datos = {
       fecha: formServ.fecha, tipo: formServ.tipo, concepto: formServ.concepto.trim(),
       descripcion: formServ.descripcion.trim() || null, taller: formServ.taller.trim() || null,
       km: formServ.km === '' ? null : Number(formServ.km),
       mano_obra: formServ.mano_obra === '' ? 0 : Number(formServ.mano_obra),
       refacciones: formServ.refacciones === '' ? 0 : Number(formServ.refacciones),
-      registrado_por: flotaPerfil.perfil_id,
-    }).select('id').maybeSingle();
+    };
+    const { data: servGuardado, error: errServ } = formServ.id
+      ? await supabase.from('flota_servicios').update(datos).eq('id', formServ.id).select('id').maybeSingle()
+      : await supabase.from('flota_servicios').insert({
+          ...datos, vehiculo_id: Number(id), registrado_por: flotaPerfil.perfil_id,
+        }).select('id').maybeSingle();
     if (errServ) { setGuardando(false); return setFormError(errServ.message); }
 
     for (const file of formServ.archivos) {
@@ -425,6 +439,21 @@ export default function UnidadDetalle() {
 
     setGuardando(false);
     setModalServ(false); cargar();
+  }
+
+  // Cierra un mantenimiento que se abrio solo al procesar un ticket; si
+  // tiene ticket ligado, ese ticket se marca "completado" en la misma
+  // operacion -- no hace falta que el admin lo cierre aparte.
+  async function cerrarMantenimiento(s) {
+    if (!confirm('¿Cerrar este mantenimiento? Confirma que ya se capturó el costo final.')) return;
+    const { error: err } = await supabase.from('flota_servicios').update({ estatus: 'cerrado' }).eq('id', s.id);
+    if (err) { alert(err.message); return; }
+    if (s.ticket_id) {
+      await supabase.from('flota_tickets')
+        .update({ estatus: 'completado', resuelto_por: flotaPerfil.perfil_id, resuelto_en: new Date().toISOString() })
+        .eq('id', s.ticket_id);
+    }
+    cargar();
   }
 
   if (error === 'no-existe') {
@@ -667,18 +696,26 @@ export default function UnidadDetalle() {
                 { key: 'fecha', header: 'Fecha', nowrap: true, render: (s) => fechaCorta(s.fecha) },
                 { key: 'concepto', header: 'Concepto', render: (s) => (
                     <div>
-                      <div>{s.concepto}</div>
+                      <div>
+                        {s.concepto}
+                        {s.estatus === 'abierto' && <Badge color="var(--serious)">En proceso</Badge>}
+                      </div>
                       {s.taller && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.taller}</div>}
+                      {s.ticket_id && (
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Ticket {ticketById[s.ticket_id]?.folio ?? `#${s.ticket_id}`}
+                        </div>
+                      )}
                     </div>) },
                 { key: 'tipo', header: 'Tipo', nowrap: true,
                   render: (s) => <Badge color={s.tipo === 'preventivo' ? 'var(--series-1)' : 'var(--serious)'}>{s.tipo === 'preventivo' ? 'Preventivo' : 'Correctivo'}</Badge> },
                 { key: 'km', header: 'Km', align: 'right', render: (s) => s.km ? Number(s.km).toLocaleString('es-MX') : '—' },
                 { key: 'total', header: 'Costo', align: 'right', render: (s) => money(Number(s.mano_obra) + Number(s.refacciones)) },
-                { key: 'archivos', header: '', nowrap: true, render: (s) => {
+                { key: 'archivos', header: '', render: (s) => {
                     const archivos = archivosPorServicio[s.id] ?? [];
                     if (!archivos.length) return null;
                     return (
-                      <div className="flex flex-wrap justify-end gap-2">
+                      <div className="flex flex-wrap gap-2">
                         {archivos.map((a, i) => (
                           <button key={a.id} onClick={() => verDoc(a.archivo_path)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
                             Archivo {archivos.length > 1 ? i + 1 : ''}
@@ -687,6 +724,17 @@ export default function UnidadDetalle() {
                       </div>
                     );
                   } },
+                ...(esFlotaAdmin ? [{ key: 'accion', header: '', nowrap: true, render: (s) => (
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => abrirEditarServicio(s)} className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                        Editar
+                      </button>
+                      {s.estatus === 'abierto' && (
+                        <button onClick={() => cerrarMantenimiento(s)} className="text-xs underline" style={{ color: 'var(--good)' }}>
+                          Cerrar
+                        </button>
+                      )}
+                    </div>) }] : []),
               ]}
               filas={d.servicios}
             />
@@ -805,8 +853,9 @@ export default function UnidadDetalle() {
         </form>
       </Modal>
 
-      {/* ---------------- Registrar servicio ---------------- */}
-      <Modal abierto={modalServ} onClose={() => setModalServ(false)} titulo="Registrar servicio">
+      {/* ---------------- Registrar / editar servicio ---------------- */}
+      <Modal abierto={modalServ} onClose={() => setModalServ(false)}
+             titulo={formServ.id ? 'Editar mantenimiento' : 'Registrar servicio'}>
         <form onSubmit={guardarServicio} className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Campo label="Fecha" required>
@@ -897,7 +946,7 @@ export default function UnidadDetalle() {
                   <Select value={conductorForm.persona_id} required onChange={(e) => seleccionarPersona(e.target.value)}>
                     <option value="">Selecciona…</option>
                     {personasAsignables.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nombre} · {ROLES[p.rol]} · {p.email}</option>
+                      <option key={p.id} value={p.id}>{p.nombre} · {ROLES_FLOTA[p.rol]} · {p.email}</option>
                     ))}
                   </Select>
                 </Campo>
@@ -908,17 +957,17 @@ export default function UnidadDetalle() {
                   </p>
                 )}
                 <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-                  <Campo label="Gerente" hint="Define su equipo — de aquí sale también su Director, si el gerente ya tiene uno asignado">
+                  <Campo label="Supervisor" hint="Define su equipo para efectos de reportes y bandejas por equipo">
                     <Select value={conductorForm.supervisor_id} onChange={(e) => setConductorForm({ ...conductorForm, supervisor_id: e.target.value })}>
                       <option value="">Sin asignar</option>
                       {posiblesGerentes.filter((g) => g.id !== conductorForm.persona_id).map((g) => (
-                        <option key={g.id} value={g.id}>{g.nombre} · {ROLES[g.rol]}</option>
+                        <option key={g.id} value={g.id}>{g.nombre} · {ROLES_FLOTA[g.rol]}</option>
                       ))}
                     </Select>
                   </Campo>
                   {conductorForm.supervisor_id && personaById[conductorForm.supervisor_id]?.supervisor_id && (
                     <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      Director: {personaById[personaById[conductorForm.supervisor_id].supervisor_id]?.nombre ?? '—'}
+                      A su vez supervisado por: {personaById[personaById[conductorForm.supervisor_id].supervisor_id]?.nombre ?? '—'}
                     </p>
                   )}
                 </div>

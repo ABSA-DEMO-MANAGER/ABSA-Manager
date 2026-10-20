@@ -7,9 +7,9 @@ import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { money, moneyCorto, mesCorto, fechaCorta, hoyISO, normalizarTexto } from '../../lib/format';
 import { descargarCSV } from '../../lib/flotasCSV';
+import { ROLES_FLOTA } from '../../lib/rolesFlotas';
 import { Card, Tabla, Select, Cargando, Aviso, Badge, Stat, Input, Boton } from '../../components/ui';
 
-const ROLES = { admin: 'Administrador General', director: 'Director', gerente: 'Gerente', usuario: 'Usuario', pendiente: 'Pendiente' };
 const mesActual = () => new Date().toISOString().slice(0, 7);
 const ejeStyle = { fontSize: 11, fill: 'var(--text-muted)' };
 
@@ -82,7 +82,7 @@ export default function Tablero() {
       supabase.rpc('flota_listar_usuarios'),
       supabase.from('flota_documentos').select('vehiculo_id, tipo, vence'),
       supabase.from('flota_servicios')
-        .select('id, vehiculo_id, fecha, tipo, concepto, taller, km, mano_obra, refacciones')
+        .select('id, vehiculo_id, fecha, tipo, concepto, taller, km, mano_obra, refacciones, estatus')
         .order('fecha', { ascending: false }),
       supabase.from('flota_servicio_archivos').select('id, servicio_id'),
     ]);
@@ -260,7 +260,7 @@ export default function Tablero() {
 
   const totalCostosMes = costosPorCategoria.reduce((a, c) => a + c.monto, 0);
 
-  if (!puedeVerEquipo) return <Aviso tono="critical">Esta vista es solo para Administrador General, Director y Gerente.</Aviso>;
+  if (!puedeVerEquipo) return <Aviso tono="critical">Esta vista es solo para Administrador General, Administrador Flotas y Gerente.</Aviso>;
   if (error) return <Aviso tono="critical">No se pudo cargar el tablero: {error}</Aviso>;
   if (!d) return <Cargando />;
 
@@ -281,7 +281,7 @@ export default function Tablero() {
           <Select value={fPersona} onChange={(e) => setFPersona(e.target.value)} className="!w-auto">
             <option value="">Todas las personas</option>
             {d.personas.filter((p) => p.rol !== 'pendiente').map((p) => (
-              <option key={p.id} value={p.id}>{p.nombre} · {ROLES[p.rol]}</option>
+              <option key={p.id} value={p.id}>{p.nombre} · {ROLES_FLOTA[p.rol]}</option>
             ))}
           </Select>
         </div>
@@ -332,7 +332,7 @@ export default function Tablero() {
                   { key: 'persona', header: 'Conductor', render: (f) => (
                       <div>
                         <div>{f.v.conductor_nombre || 'Sin asignar'}</div>
-                        {f.persona && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{ROLES[f.persona.rol]}</div>}
+                        {f.persona && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{ROLES_FLOTA[f.persona.rol]}</div>}
                       </div>) },
                   { key: 'costo', header: 'Costo', align: 'right', render: (f) => money(Math.round(f.costo)) },
                   { key: 'gasolina', header: 'Gasolina', align: 'right', render: (f) => money(Math.round(f.gasolina)) },
@@ -416,7 +416,10 @@ export default function Tablero() {
                       </div>) },
                   { key: 'concepto', header: 'Concepto', render: (s) => (
                       <div>
-                        <div>{s.concepto}</div>
+                        <div>
+                          {s.concepto}
+                          {s.estatus === 'abierto' && <Badge color="var(--serious)">En proceso</Badge>}
+                        </div>
                         {s.taller && <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.taller}</div>}
                       </div>) },
                   { key: 'tipo', header: 'Tipo', nowrap: true,

@@ -68,7 +68,7 @@ function mailtoDecision({ sol, decision, motivoRechazo, vehLabel, personaById, c
 }
 
 export default function Tickets() {
-  const { flotaPerfil, esFlotaAdmin, puedeVerEquipo } = useFlotaPerfil();
+  const { flotaPerfil, esFlotaAdmin, esAdminGasolina, puedeGestionarGasolina, puedeVerEquipo } = useFlotaPerfil();
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [fGrupo, setFGrupo] = useState('');
@@ -81,13 +81,15 @@ export default function Tickets() {
   const [detalle, setDetalle] = useState(null);
   const [estatusEdit, setEstatusEdit] = useState('');
   const [motivoEdit, setMotivoEdit] = useState('');
+  const [servicioRelacionado, setServicioRelacionado] = useState('');
+  const [historialServ, setHistorialServ] = useState([]);
   const [archivoCierre, setArchivoCierre] = useState(null);
   const [correoHref, setCorreoHref] = useState(null);
 
   async function cargar() {
     const [t, s, v, per, ciu, dist, precio] = await Promise.all([
       supabase.from('flota_tickets')
-        .select('id, folio, vehiculo_id, categoria, descripcion, estatus, motivo_rechazo, kilometraje, archivo_cierre_path, resuelto_por, resuelto_en, solicitado_por, creado_en')
+        .select('id, folio, vehiculo_id, categoria, descripcion, estatus, motivo_rechazo, relacionado_servicio_id, kilometraje, archivo_cierre_path, resuelto_por, resuelto_en, solicitado_por, creado_en')
         .order('creado_en', { ascending: false }),
       supabase.from('flota_gasolina_solicitudes').select('*').order('creado_en', { ascending: false }),
       supabase.from('flota_vehiculos').select('id, codigo, marca, modelo, placas, rendimiento_km_l, km').order('codigo'),
@@ -123,7 +125,11 @@ export default function Tickets() {
     ? Number(form.litros_solicitados) * d.precioLitro : null;
 
   function abrirNuevo() {
-    setForm({ ...FORM_VACIO, vehiculo_id: flotaPerfil?.vehiculo_asignado_id ? String(flotaPerfil.vehiculo_asignado_id) : '' });
+    setForm({
+      ...FORM_VACIO,
+      categoria: esAdminGasolina ? 'gasolina_viaje' : FORM_VACIO.categoria,
+      vehiculo_id: flotaPerfil?.vehiculo_asignado_id ? String(flotaPerfil.vehiculo_asignado_id) : '',
+    });
     setFormError(null); setModal(true);
   }
 
@@ -193,11 +199,19 @@ export default function Tickets() {
     }
   }
 
-  function abrirDetalle(row) {
+  async function abrirDetalle(row) {
     setDetalle(row); setCorreoHref(null); setArchivoCierre(null);
+    setHistorialServ([]);
     if (row._origen === 'ticket') {
       setEstatusEdit(row.estatus);
       setMotivoEdit(row.motivo_rechazo ?? '');
+      setServicioRelacionado(row.relacionado_servicio_id ?? '');
+      // Historial de servicios de esta unidad -- para decidir si rechazar
+      // o procesar el ticket con informacion de lo que ya se le ha hecho.
+      const { data } = await supabase.from('flota_servicios')
+        .select('id, fecha, concepto, descripcion')
+        .eq('vehiculo_id', row.vehiculo_id).order('fecha', { ascending: false }).limit(15);
+      setHistorialServ(data ?? []);
     } else {
       setMotivoEdit('');
     }
@@ -221,14 +235,30 @@ export default function Tickets() {
     let archivo_cierre_path = detalle.archivo_cierre_path ?? null;
     if (archivoCierre) archivo_cierre_path = await subirArchivo(archivoCierre, `flota/${detalle.vehiculo_id}/tickets`);
 
+    const entraEnProceso = estatusEdit === 'en_proceso' && detalle.estatus !== 'en_proceso';
     const cierra = ['completado', 'rechazado'].includes(estatusEdit) && detalle.estatus !== estatusEdit;
     const { error: err } = await supabase.from('flota_tickets').update({
       estatus: estatusEdit, motivo_rechazo: estatusEdit === 'rechazado' ? motivoEdit.trim() : null,
+      relacionado_servicio_id: estatusEdit === 'rechazado' ? (servicioRelacionado || null) : null,
       archivo_cierre_path,
       ...(cierra ? { resuelto_por: flotaPerfil.perfil_id, resuelto_en: new Date().toISOString() } : {}),
     }).eq('id', detalle.id);
     if (err) { alert(err.message); return; }
     if (estatusEdit === 'completado') await actualizarKmSiAplica(detalle.vehiculo_id, detalle.kilometraje);
+
+    // Procesar abre automaticamente el mantenimiento ligado a este ticket
+    // -- el administrador lo va completando despues (costo, archivos,
+    // descripcion) desde "Servicios" en la ficha de la unidad.
+    if (entraEnProceso) {
+      const tipo = detalle.categoria === 'mantenimiento' ? 'preventivo' : 'correctivo';
+      await supabase.from('flota_servicios').insert({
+        vehiculo_id: detalle.vehiculo_id, ticket_id: detalle.id, fecha: hoyISO(), tipo,
+        concepto: CATEGORIAS[detalle.categoria] ?? detalle.categoria,
+        descripcion: detalle.descripcion, estatus: 'abierto', mano_obra: 0, refacciones: 0,
+        registrado_por: flotaPerfil.perfil_id,
+      });
+    }
+
     setDetalle(null); cargar();
   }
 
@@ -289,13 +319,13 @@ export default function Tickets() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Tickets</h1>
           <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {esFlotaAdmin ? `${filtrados.length} de ${filas.length} solicitudes` : 'Mantenimiento, gasolina, tags y siniestros — todo desde aquí'}
+            {esFlotaAdmin ? `${filtrados.length} de ${filas.length} solicitudes` : esAdminGasolina ? 'Gasolina y tags — autoriza desde aquí' : 'Mantenimiento, gasolina, tags y siniestros — todo desde aquí'}
           </p>
         </div>
         <Boton onClick={abrirNuevo}>+ Nuevo ticket</Boton>
       </div>
 
-      {(esFlotaAdmin || puedeVerEquipo) && (
+      {(esFlotaAdmin || puedeVerEquipo || esAdminGasolina) && (
         <div className="flex flex-wrap gap-2">
           <Select value={fGrupo} onChange={(e) => setFGrupo(e.target.value)} className="!w-auto">
             <option value="">Todos los estatus</option>
@@ -311,7 +341,7 @@ export default function Tickets() {
           columnas={[
             { key: 'folio', header: 'Folio', nowrap: true, render: (t) => <span className="tnum">{t.folio}</span> },
             { key: 'vehiculo_id', header: 'Unidad', render: (t) => nombreVeh(vehById[t.vehiculo_id]) },
-            ...(esFlotaAdmin || puedeVerEquipo ? [{ key: 'solicitante', header: 'Solicitante', render: (t) =>
+            ...(esFlotaAdmin || puedeVerEquipo || esAdminGasolina ? [{ key: 'solicitante', header: 'Solicitante', render: (t) =>
                 personaById[t._origen === 'ticket' ? t.solicitado_por : t.solicitante_id]?.nombre ?? '—' }] : []),
             { key: 'categoria', header: 'Categoría', nowrap: true, render: categoriaDe },
             { key: 'creado_en', header: 'Fecha', nowrap: true, render: (t) => fechaCorta(t.creado_en?.slice(0, 10)) },
@@ -334,7 +364,9 @@ export default function Tickets() {
           </Campo>
           <Campo label="Categoría">
             <Select value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-              {Object.entries(CATEGORIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.entries(CATEGORIAS)
+                .filter(([k]) => !esAdminGasolina || ['gasolina_viaje', 'gasolina_extra', 'tag'].includes(k))
+                .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
           </Campo>
 
@@ -469,6 +501,22 @@ export default function Tickets() {
               </button>
             )}
 
+            {esFlotaAdmin && historialServ.length > 0 && (
+              <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                <div className="mb-1.5 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                  Historial de servicios de esta unidad
+                </div>
+                <ul className="max-h-40 space-y-1 overflow-y-auto text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {historialServ.map((s) => (
+                    <li key={s.id} className="border-b pb-1" style={{ borderColor: 'var(--border)' }}>
+                      <strong>{fechaCorta(s.fecha)}</strong> — {s.concepto}
+                      {s.descripcion && <span style={{ color: 'var(--text-muted)' }}> · {s.descripcion}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {esFlotaAdmin && (
               <div className="space-y-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="text-xs font-medium" style={{ color: 'var(--series-1)' }}>Gestión</div>
@@ -478,9 +526,22 @@ export default function Tickets() {
                   </Select>
                 </Campo>
                 {estatusEdit === 'rechazado' && (
-                  <Campo label="Motivo de rechazo" required>
-                    <Textarea rows={2} value={motivoEdit} onChange={(e) => setMotivoEdit(e.target.value)} />
-                  </Campo>
+                  <>
+                    <Campo label="Motivo de rechazo" required>
+                      <Textarea rows={2} value={motivoEdit} onChange={(e) => setMotivoEdit(e.target.value)} />
+                    </Campo>
+                    <Campo label="Servicio relacionado" hint="Opcional — referencia informativa, ej. ya se atendió antes">
+                      <Select value={servicioRelacionado} onChange={(e) => setServicioRelacionado(e.target.value)}>
+                        <option value="">Sin relacionar</option>
+                        {historialServ.map((s) => (
+                          <option key={s.id} value={s.id}>{fechaCorta(s.fecha)} — {s.concepto}</option>
+                        ))}
+                      </Select>
+                    </Campo>
+                  </>
+                )}
+                {estatusEdit === 'en_proceso' && detalle.estatus !== 'en_proceso' && (
+                  <Aviso>Al guardar, se abre un mantenimiento ligado a este ticket en "Servicios" de la unidad.</Aviso>
                 )}
                 {['completado', 'rechazado'].includes(estatusEdit) && (
                   <Campo label="Archivo de cierre" hint="Opcional — evidencia de que se resolvió">
@@ -546,7 +607,7 @@ export default function Tickets() {
               </button>
             )}
 
-            {esFlotaAdmin && detalle.motivo === 'viaje' && cuadre && (
+            {(esFlotaAdmin || puedeGestionarGasolina) && detalle.motivo === 'viaje' && cuadre && (
               <div className="rounded-lg border p-3" style={{ borderColor: 'var(--border)' }}>
                 <div className="mb-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Cuadre de la solicitud</div>
                 {!cuadre.kmEsperado ? (
@@ -568,7 +629,7 @@ export default function Tickets() {
               </div>
             )}
 
-            {esFlotaAdmin && detalle.estatus === 'pendiente' && (
+            {(esFlotaAdmin || puedeGestionarGasolina) && detalle.estatus === 'pendiente' && (
               <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                 <Campo label="Motivo de rechazo" hint="Solo si vas a rechazar">
                   <Textarea rows={2} value={motivoEdit} onChange={(e) => setMotivoEdit(e.target.value)} />
@@ -576,10 +637,16 @@ export default function Tickets() {
                 <Campo label="Archivo de cierre" hint="Opcional — evidencia de que se resolvió">
                   <FotoOPdfInput value={archivoCierre} onChange={setArchivoCierre} />
                 </Campo>
-                <div className="flex justify-end gap-2">
-                  <Boton variant="danger" onClick={() => resolverSolicitud('rechazada')}>Rechazar</Boton>
-                  <Boton onClick={() => resolverSolicitud('aprobada')}>Aprobar</Boton>
-                </div>
+                {puedeGestionarGasolina ? (
+                  <div className="flex justify-end gap-2">
+                    <Boton variant="danger" onClick={() => resolverSolicitud('rechazada')}>Rechazar</Boton>
+                    <Boton onClick={() => resolverSolicitud('aprobada')}>Aprobar</Boton>
+                  </div>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Solo Administrador General o Administrador Gasolina pueden aprobar/rechazar esta solicitud.
+                  </p>
+                )}
               </div>
             )}
 

@@ -57,7 +57,12 @@ function descargarPlantillaFuel() {
 }
 
 export default function Combustible() {
-  const { flotaPerfil, esFlotaAdmin, puedeVerEquipo } = useFlotaPerfil();
+  const { flotaPerfil, esFlotaAdmin, esAdminGasolina, puedeGestionarGasolina, puedeVerEquipo } = useFlotaPerfil();
+  // Administrador Gasolina opera el modulo completo (cajon, cargas,
+  // precio, distancias); Administrador Flotas ve y tambien lo opera,
+  // salvo aprobar/rechazar una carga pendiente -- eso es
+  // puedeGestionarGasolina (sin admin_flotas), mas abajo.
+  const puedeGestionarModulo = esFlotaAdmin || esAdminGasolina;
   const [d, setD] = useState(null);
   const [error, setError] = useState(null);
   const [mes, setMes] = useState(mesActual());
@@ -310,7 +315,7 @@ export default function Combustible() {
     cargar();
   }
 
-  if (!puedeVerEquipo) return <Aviso tono="critical">Esta vista es solo para Administrador General, Director y Gerente.</Aviso>;
+  if (!puedeVerEquipo && !esAdminGasolina) return <Aviso tono="critical">Esta vista es solo para Administrador General, Administrador Flotas, Administrador Gasolina y Gerente.</Aviso>;
   if (error) return <Aviso tono="critical">No se pudo cargar Combustible: {error}</Aviso>;
   if (!d) return <Cargando />;
 
@@ -338,7 +343,7 @@ export default function Combustible() {
         <Tarjeta label="Tags · mes" valor={money(Math.round(tTag))} />
       </div>
 
-      {esFlotaAdmin && (
+      {puedeGestionarModulo && (
         <Card title="Importar cargas de combustible"
               subtitle="Exporta el consumo de tu proveedor (Sodexo u otro) a CSV con estas columnas. Cada renglón se enlaza a la unidad por placas y se registra como gasto aprobado. No se duplican cargas ya importadas (por folio).">
           <div className="flex flex-wrap gap-2">
@@ -381,19 +386,20 @@ export default function Combustible() {
         </Card>
       )}
 
-      {esFlotaAdmin && pendientes.length > 0 && (
-        <Card title={`Cargas registradas por aprobar · ${pendientes.length}`}>
+      {puedeGestionarModulo && pendientes.length > 0 && (
+        <Card title={`Cargas registradas por aprobar · ${pendientes.length}`}
+              subtitle={!puedeGestionarGasolina ? 'Solo Administrador General o Administrador Gasolina pueden aprobar/rechazar estas cargas.' : undefined}>
           <Tabla
             columnas={[
               { key: 'veh', header: 'Unidad', render: (g) => nombreVeh(vehById[g.vehiculo_id]) },
               { key: 'descripcion', header: 'Descripción', render: (g) => g.descripcion || 'Carga extra' },
               { key: 'monto', header: 'Monto', align: 'right', render: (g) => money(g.monto) },
-              { key: 'acciones', header: '', nowrap: true, render: (g) => (
+              ...(puedeGestionarGasolina ? [{ key: 'acciones', header: '', nowrap: true, render: (g) => (
                   <div className="flex justify-end gap-1.5">
                     <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => resolver(g.id, true)}>Aprobar</Boton>
                     <Boton variant="danger" className="!py-1 !px-2 !text-xs" onClick={() => resolver(g.id, false)}>Rechazar</Boton>
                   </div>
-                ) },
+                ) }] : []),
             ]}
             filas={pendientes}
           />
@@ -440,7 +446,7 @@ export default function Combustible() {
                 const c = consumo[v.id] || { tagP: 0 };
                 return c.tagP ? <span className="tnum text-sm">{money(Math.round(c.tagP))}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>;
               } },
-            ...(esFlotaAdmin ? [{ key: 'acciones', header: '', nowrap: true, render: (v) => (
+            ...(puedeGestionarModulo ? [{ key: 'acciones', header: '', nowrap: true, render: (v) => (
                 <div className="flex justify-end gap-1.5">
                   <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => abrirCajon(v)}>Cajón</Boton>
                   <Boton variant="ghost" className="!py-1 !px-2 !text-xs" onClick={() => abrirExtra(v)}>Carga extra</Boton>
@@ -452,7 +458,7 @@ export default function Combustible() {
         />
       </Card>
 
-      {esFlotaAdmin && (
+      {puedeGestionarModulo && (
         <Card title="Precio de la gasolina" subtitle="Se usa para calcular el costo estimado de las solicitudes de gasolina en Tickets.">
           {editandoPrecio ? (
             <form onSubmit={guardarPrecio} className="flex flex-wrap items-end gap-2">
@@ -471,7 +477,7 @@ export default function Combustible() {
         </Card>
       )}
 
-      {esFlotaAdmin && (
+      {puedeGestionarModulo && (
         <Card title="Distancias entre ciudades" subtitle="Se usan para calcular los km de un viaje en Tickets. Agrega los pares que falten.">
           <form onSubmit={agregarDistancia} className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
             <Select value={distForm.ciudad_a} onChange={(e) => setDistForm({ ...distForm, ciudad_a: e.target.value })}>
