@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
+import { COLUMNAS_UNIDAD, descargarCSV } from '../../lib/flotasCSV';
 import { Card, Tabla, Boton, Aviso, Badge, Cargando } from '../../components/ui';
-
-const COLUMNAS = [
-  'codigo', 'ciudad', 'marca', 'modelo', 'anio', 'tipo', 'version', 'motor', 'color', 'placas', 'vin', 'origen_placa',
-  'propiedad', 'estado', 'km', 'valor', 'costo_poliza',
-  'conductor_nombre', 'conductor_correo', 'conductor_telefono', 'conductor_licencia', 'licencia_vence',
-  'puesto', 'departamento', 'area', 'jefe_directo', 'tipo_prestacion',
-  'proximo_servicio_km', 'proximo_servicio_fecha', 'fecha_ultimo_servicio', 'notas',
-  'verificacion_vence', 'seguro_vence', 'tenencia_vence', 'circulacion_vence', 'arrendadora', 'contrato_fin',
-];
 
 const FILA_EJEMPLO = [
   'ECO-1001', 'Guadalajara', 'Nissan', 'NP300', '2023', 'Pickup', 'XL 4X2 TA', '2.5L 4 cil.', 'Blanco', 'JAB-12-34', '3N6AD33C4MK000000', 'JALISCO',
@@ -39,19 +31,13 @@ function parseCSV(texto) {
 }
 
 function descargarPlantilla() {
-  const csv = [COLUMNAS, FILA_EJEMPLO].map((f) => f.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'plantilla_flotas.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  descargarCSV('plantilla_flotas.csv', [COLUMNAS_UNIDAD, FILA_EJEMPLO]);
 }
 
 export default function CargaMasiva() {
   const { esFlotaAdmin } = useFlotaPerfil();
   const [ciudades, setCiudades] = useState(null);
-  const [codigosExistentes, setCodigosExistentes] = useState(new Set());
+  const [idPorCodigo, setIdPorCodigo] = useState(new Map());
   const [personas, setPersonas] = useState(null);
   const [error, setError] = useState(null);
 
@@ -63,12 +49,12 @@ export default function CargaMasiva() {
     (async () => {
       const [c, v, p] = await Promise.all([
         supabase.from('flota_ciudades').select('id, nombre').eq('activa', true).order('nombre'),
-        supabase.from('flota_vehiculos').select('codigo'),
+        supabase.from('flota_vehiculos').select('id, codigo'),
         supabase.rpc('flota_listar_usuarios'),
       ]);
       if (c.error || v.error || p.error) { setError((c.error || v.error || p.error).message); return; }
       setCiudades(c.data);
-      setCodigosExistentes(new Set(v.data.map((x) => (x.codigo || '').toUpperCase()).filter(Boolean)));
+      setIdPorCodigo(new Map(v.data.filter((x) => x.codigo).map((x) => [x.codigo.toUpperCase(), x.id])));
       setPersonas(p.data);
     })();
   }, []);
@@ -96,7 +82,7 @@ export default function CargaMasiva() {
         const persona = correo ? personaPorCorreo[correo] : null;
         const conductorConflicto = !!(persona && persona.vehiculo_asignado_id);
         return {
-          _codigoDuplicado: codigo && codigosExistentes.has(codigo.toUpperCase()),
+          _idExistente: codigo ? idPorCodigo.get(codigo.toUpperCase()) ?? null : null,
           _ciudadId: ciudadTexto ? ciudadPorNombre[ciudadTexto.toLowerCase()] ?? null : null,
           _ciudadTexto: ciudadTexto,
           _persona: persona && !conductorConflicto ? persona : null,
@@ -127,9 +113,22 @@ export default function CargaMasiva() {
 
   async function importar() {
     setImportando(true);
-    let creadas = 0, omitidas = 0, errores = 0, vinculados = 0, precargados = 0;
+    let creadas = 0, actualizadas = 0, errores = 0, vinculados = 0, precargados = 0;
     for (const f of filas) {
-      if (f._codigoDuplicado) { omitidas++; continue; }
+      // Código ya existente: se actualizan solo los datos del VEHICULO
+      // (no el conductor -- eso se cambia con Asignar/Reasignar en la
+      // ficha de la unidad) y no se vuelve a crear servicio ni
+      // documentos -- eso evita duplicados si se re-sube el mismo CSV.
+      if (f._idExistente) {
+        const { error: errUpd } = await supabase.from('flota_vehiculos').update({
+          ciudad_id: f._ciudadId, marca: f.marca, modelo: f.modelo, anio: f.anio, tipo: f.tipo,
+          version: f.version, motor: f.motor, color: f.color, placas: f.placas, vin: f.vin, origen_placa: f.origen_placa,
+          propiedad: f.propiedad, estado: f.estado, km: f.km, valor: f.valor, costo_poliza: f.costo_poliza,
+          proximo_servicio_km: f.proximo_servicio_km, proximo_servicio_fecha: f.proximo_servicio_fecha,
+        }).eq('id', f._idExistente);
+        if (errUpd) errores++; else actualizadas++;
+        continue;
+      }
 
       const tieneConductor = !!f._persona;
       const notasExtra = [];
@@ -191,7 +190,7 @@ export default function CargaMasiva() {
       }
     }
     setImportando(false);
-    setResultado({ creadas, omitidas, errores, vinculados, precargados });
+    setResultado({ creadas, actualizadas, errores, vinculados, precargados });
     setFilas(null);
   }
 
@@ -210,12 +209,12 @@ export default function CargaMasiva() {
 
       <Card title="1. Descarga la plantilla" subtitle="Llénala en Excel o Google Sheets y guárdala como CSV.">
         <ul className="mb-4 list-disc space-y-1 pl-5 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          <li>La columna <strong>ciudad</strong> debe escribirse tal como aparece en Flotas (Guadalajara, Hermosillo, Culiacán…). Si no coincide, la unidad se crea sin ciudad.</li>
+          <li>La columna <strong>ciudad</strong> debe escribirse tal como aparece en Flotas (Guadalajara, Hermosillo, Culiacán…). Si no coincide, la unidad queda sin ciudad.</li>
           <li>Fechas en formato <strong>AAAA-MM-DD</strong>. Deja vacío lo que no aplique.</li>
           <li><strong>propiedad</strong>: "propio" o "arrendado". <strong>estado</strong>: "activo", "en_mantenimiento" o "inactivo".</li>
-          <li>Si el <strong>código</strong> ya existe en el sistema, esa fila se omite al importar (no se duplica).</li>
-          <li>Los datos del conductor (nombre, teléfono, puesto, departamento, licencia, etc.) siempre se guardan en la unidad. Si <strong>conductor_correo</strong> ya tiene cuenta registrada en Flotas, se vincula de inmediato para que vea su propia unidad; si no tiene cuenta todavía, queda "precargado" y se vincula solo en cuanto esa persona entre por primera vez con ese correo.</li>
-          <li>Si <strong>fecha_ultimo_servicio</strong> viene llena, se registra automáticamente como un servicio en el historial de la unidad.</li>
+          <li>Si el <strong>código</strong> ya existe en el sistema, esa fila <strong>actualiza</strong> los datos del vehículo (marca, km, próximo servicio, etc.) — no crea una unidad duplicada. Para esas filas <strong>no se tocan los datos del conductor</strong> (eso se cambia desde "Asignar / Reasignar" en la ficha de la unidad), ni se vuelve a registrar un servicio o documento aunque esas columnas vengan llenas.</li>
+          <li>Si el código <strong>no existe todavía</strong>, es una unidad nueva: ahí sí se usan los datos del conductor (nombre, teléfono, puesto, etc. — si <strong>conductor_correo</strong> ya tiene cuenta en Flotas, se vincula de inmediato; si no, queda "precargado"), y si <strong>fecha_ultimo_servicio</strong> viene llena, se registra como su primer servicio.</li>
+          <li>Usa el botón <strong>"Descargar unidades (CSV)"</strong> en Unidades para bajar el inventario completo actual en este mismo formato, editarlo y volver a subirlo aquí.</li>
         </ul>
         <Boton variant="ghost" onClick={descargarPlantilla}>Descargar plantilla CSV</Boton>
       </Card>
@@ -228,24 +227,29 @@ export default function CargaMasiva() {
 
       {resultado && (
         <Aviso tono={resultado.errores ? 'warning' : 'good'}>
-          Se importaron <strong>{resultado.creadas}</strong> unidades ({resultado.vinculados} con conductor ya vinculado
-          a su cuenta, {resultado.precargados} precargados para vincularse en cuanto entren por primera vez).
-          {resultado.omitidas > 0 && <> {resultado.omitidas} se omitieron por código duplicado.</>}
+          Se crearon <strong>{resultado.creadas}</strong> unidades nuevas ({resultado.vinculados} con conductor ya vinculado
+          a su cuenta, {resultado.precargados} precargados para vincularse en cuanto entren por primera vez)
+          {resultado.actualizadas > 0 && <> y se <strong>actualizaron {resultado.actualizadas}</strong> unidades ya existentes.</>}
           {resultado.errores > 0 && <> {resultado.errores} tuvieron un error al guardarse.</>}
         </Aviso>
       )}
 
       {filas && (
         <Card title={`3. Revisa antes de importar (${filas.length} filas)`}
-              right={<Boton onClick={importar} disabled={importando}>{importando ? 'Importando…' : `Importar ${filas.filter((f) => !f._codigoDuplicado).length} unidades`}</Boton>}>
+              right={<Boton onClick={importar} disabled={importando}>
+                {importando ? 'Importando…' : `Importar ${filas.filter((f) => !f._idExistente).length} nuevas / actualizar ${filas.filter((f) => f._idExistente).length}`}
+              </Boton>}>
           {filas.some((f) => f._ciudadTexto && !f._ciudadId) && (
-            <Aviso tono="warning">Algunas filas tienen una ciudad que no reconozco — esas unidades se crearán sin ciudad asignada.</Aviso>
+            <Aviso tono="warning">Algunas filas tienen una ciudad que no reconozco — esas unidades quedarán sin ciudad asignada.</Aviso>
           )}
-          {filas.some((f) => f._conductorSinCuenta) && (
-            <Aviso>Algunas filas tienen un conductor sin cuenta en Flotas todavía — sus datos se guardan en la unidad y quedan precargados: se vinculan solos en cuanto esa persona entre por primera vez con ese correo.</Aviso>
+          {filas.some((f) => f._idExistente) && (
+            <Aviso>Algunas filas ya existen (por código) — solo se actualizan sus datos de vehículo; el conductor y el historial de servicios/documentos no se tocan.</Aviso>
           )}
-          {filas.some((f) => f._conductorConflicto) && (
-            <Aviso tono="warning">Algunas filas tienen un conductor que ya trae otra unidad asignada — no se vincula de nuevo, para no quitársela.</Aviso>
+          {filas.some((f) => !f._idExistente && f._conductorSinCuenta) && (
+            <Aviso>Algunas filas nuevas tienen un conductor sin cuenta en Flotas todavía — sus datos se guardan en la unidad y quedan precargados: se vinculan solos en cuanto esa persona entre por primera vez con ese correo.</Aviso>
+          )}
+          {filas.some((f) => !f._idExistente && f._conductorConflicto) && (
+            <Aviso tono="warning">Algunas filas nuevas tienen un conductor que ya trae otra unidad asignada — no se vincula de nuevo, para no quitársela.</Aviso>
           )}
           <div className="mt-3">
             <Tabla
@@ -255,15 +259,16 @@ export default function CargaMasiva() {
                 { key: 'ciudad', header: 'Ciudad', nowrap: true, render: (f) =>
                     f._ciudadTexto ? (f._ciudadId ? f._ciudadTexto : <span style={{ color: 'var(--critical)' }}>{f._ciudadTexto} (no encontrada)</span>) : '—' },
                 { key: 'placas', header: 'Placas', nowrap: true, render: (f) => f.placas ?? '—' },
-                { key: 'conductor', header: 'Conductor', render: (f) => (
-                    f._persona ? <Badge color="var(--good)">{f.conductor_nombre} — vinculado</Badge>
-                    : f._conductorConflicto ? <Badge color="var(--serious)">{f.conductor_nombre} — ya tiene unidad</Badge>
-                    : f._conductorSinCuenta ? <Badge color="var(--text-muted)">{f.conductor_nombre} — precargado</Badge>
-                    : f.conductor_nombre ? <Badge color="var(--text-muted)">{f.conductor_nombre}</Badge>
-                    : '—'
-                  ) },
+                { key: 'conductor', header: 'Conductor', render: (f) => {
+                    if (f._idExistente) return <span className="text-xs" style={{ color: 'var(--text-muted)' }}>(no se modifica)</span>;
+                    return f._persona ? <Badge color="var(--good)">{f.conductor_nombre} — vinculado</Badge>
+                      : f._conductorConflicto ? <Badge color="var(--serious)">{f.conductor_nombre} — ya tiene unidad</Badge>
+                      : f._conductorSinCuenta ? <Badge color="var(--text-muted)">{f.conductor_nombre} — precargado</Badge>
+                      : f.conductor_nombre ? <Badge color="var(--text-muted)">{f.conductor_nombre}</Badge>
+                      : '—';
+                  } },
                 { key: 'estatus', header: '', nowrap: true, render: (f) =>
-                    f._codigoDuplicado ? <Badge color="var(--critical)">ya existe — se omite</Badge> : <Badge color="var(--good)">nueva</Badge> },
+                    f._idExistente ? <Badge color="var(--serious)">ya existe — se actualiza</Badge> : <Badge color="var(--good)">nueva</Badge> },
               ]}
               filas={filas}
             />

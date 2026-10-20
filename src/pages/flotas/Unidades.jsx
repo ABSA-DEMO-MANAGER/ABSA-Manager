@@ -3,9 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useFlotaPerfil } from '../../lib/useFlotaPerfil';
 import { fechaCorta, hoyISO, normalizarTexto } from '../../lib/format';
+import { COLUMNAS_UNIDAD, descargarCSV } from '../../lib/flotasCSV';
 import {
   Card, Tabla, Input, Select, Cargando, Aviso, Badge, Stat, Boton, Modal, Campo, Textarea,
 } from '../../components/ui';
+
+// tipo de flota_documentos -> columna del CSV (mismo mapeo que usa
+// Carga masiva al crear estos documentos de una unidad nueva).
+const DOC_TIPO_A_COLUMNA = {
+  'Verificación vehicular': 'verificacion_vence',
+  'Póliza de seguro': 'seguro_vence',
+  'Refrendos': 'tenencia_vence',
+  'Tarjetas de circulación': 'circulacion_vence',
+  'Documentación de arrendamiento': 'contrato_fin',
+};
 
 const ESTADOS = { activo: 'Activo', en_mantenimiento: 'En mantenimiento', inactivo: 'Inactivo' };
 const COLOR_ESTADO = { activo: 'var(--good)', en_mantenimiento: 'var(--serious)', inactivo: 'var(--text-muted)' };
@@ -79,6 +90,58 @@ export default function Unidades() {
     setFormError(null); setModal(true);
   }
 
+  const [descargando, setDescargando] = useState(false);
+
+  async function descargarUnidades() {
+    setDescargando(true);
+    try {
+      const [v, docs, servs] = await Promise.all([
+        supabase.from('flota_vehiculos')
+          .select('id, codigo, ciudad_id, marca, modelo, anio, tipo, version, motor, color, placas, vin, origen_placa, propiedad, estado, km, valor, costo_poliza, conductor_nombre, conductor_correo, conductor_telefono, conductor_licencia, licencia_vence, puesto, departamento, area, jefe_directo, tipo_prestacion, proximo_servicio_km, proximo_servicio_fecha, notas')
+          .order('codigo'),
+        supabase.from('flota_documentos').select('vehiculo_id, tipo, vence, referencia'),
+        supabase.from('flota_servicios').select('vehiculo_id, fecha').order('fecha', { ascending: false }),
+      ]);
+      const err = v.error || docs.error || servs.error;
+      if (err) { alert('No se pudo descargar: ' + err.message); return; }
+
+      // un documento por tipo y vehiculo (el mas reciente, si hay varios)
+      const docsPorVehiculo = {};
+      docs.data.forEach((doc) => {
+        const col = DOC_TIPO_A_COLUMNA[doc.tipo];
+        if (!col) return;
+        docsPorVehiculo[doc.vehiculo_id] ??= {};
+        if (!docsPorVehiculo[doc.vehiculo_id][col] || doc.vence > docsPorVehiculo[doc.vehiculo_id][col]) {
+          docsPorVehiculo[doc.vehiculo_id][col] = doc.vence;
+          if (col === 'contrato_fin' && doc.referencia) docsPorVehiculo[doc.vehiculo_id].arrendadora = doc.referencia;
+        }
+      });
+
+      // flota_servicios viene ordenado desc, asi que el primero que
+      // aparece por vehiculo ya es el mas reciente.
+      const ultimoServicioPorVehiculo = {};
+      servs.data.forEach((s) => { ultimoServicioPorVehiculo[s.vehiculo_id] ??= s.fecha; });
+
+      const filas = v.data.map((u) => {
+        const docsU = docsPorVehiculo[u.id] ?? {};
+        return [
+          u.codigo, ciudadById[u.ciudad_id]?.nombre ?? '', u.marca, u.modelo, u.anio, u.tipo,
+          u.version, u.motor, u.color, u.placas, u.vin, u.origen_placa,
+          u.propiedad, u.estado, u.km, u.valor, u.costo_poliza,
+          u.conductor_nombre, u.conductor_correo, u.conductor_telefono, u.conductor_licencia, u.licencia_vence,
+          u.puesto, u.departamento, u.area, u.jefe_directo, u.tipo_prestacion,
+          u.proximo_servicio_km, u.proximo_servicio_fecha, ultimoServicioPorVehiculo[u.id] ?? '', u.notas,
+          docsU.verificacion_vence, docsU.seguro_vence, docsU.tenencia_vence, docsU.circulacion_vence,
+          docsU.arrendadora, docsU.contrato_fin,
+        ];
+      });
+
+      descargarCSV(`unidades_flotas_${hoyISO()}.csv`, [COLUMNAS_UNIDAD, ...filas]);
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   async function guardar(e) {
     e.preventDefault();
     setFormError(null);
@@ -118,7 +181,14 @@ export default function Unidades() {
             {filtrados.length} de {d.vehiculos.length} vehículos
           </p>
         </div>
-        {esFlotaAdmin && <Boton onClick={abrirNuevo}>+ Nueva unidad</Boton>}
+        {esFlotaAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Boton variant="ghost" onClick={descargarUnidades} disabled={descargando}>
+              {descargando ? 'Descargando…' : '⇩ Descargar unidades (CSV)'}
+            </Boton>
+            <Boton onClick={abrirNuevo}>+ Nueva unidad</Boton>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
