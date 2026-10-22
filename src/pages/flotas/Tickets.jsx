@@ -22,6 +22,7 @@ const FORM_VACIO = {
   ciudad_origen_id: '', ciudad_destino_id: '', ida_y_vuelta: false,
   fecha_inicio: hoyISO(), fecha_regreso: '', notas: '',
   kilometraje: '', litros_solicitados: '', monto_solicitado: '', foto: null,
+  archivos: [],
 };
 
 function distanciaEntre(distancias, aId, bId) {
@@ -77,10 +78,12 @@ export default function Tickets() {
 
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
+  const [archivoTemp, setArchivoTemp] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [formError, setFormError] = useState(null);
 
   const [detalle, setDetalle] = useState(null);
+  const [detalleArchivos, setDetalleArchivos] = useState([]);
   const [estatusEdit, setEstatusEdit] = useState('');
   const [motivoEdit, setMotivoEdit] = useState('');
   const [servicioRelacionado, setServicioRelacionado] = useState('');
@@ -143,6 +146,7 @@ export default function Tickets() {
       categoria: esAdminGasolina ? 'gasolina_viaje' : FORM_VACIO.categoria,
       vehiculo_id: flotaPerfil?.vehiculo_asignado_id ? String(flotaPerfil.vehiculo_asignado_id) : '',
     });
+    setArchivoTemp(null);
     setFormError(null); setModal(true);
   }
 
@@ -197,12 +201,19 @@ export default function Tickets() {
         });
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.from('flota_tickets').insert({
+        const { data: nuevo, error: err } = await supabase.from('flota_tickets').insert({
           vehiculo_id: Number(form.vehiculo_id), categoria: form.categoria,
           descripcion: form.descripcion.trim(), solicitado_por: flotaPerfil.perfil_id,
           kilometraje: form.kilometraje ? Number(form.kilometraje) : null,
-        });
+        }).select('id').maybeSingle();
         if (err) throw err;
+
+        for (const file of form.archivos) {
+          const ruta = await subirArchivo(file, `flota/${form.vehiculo_id}/tickets`);
+          await supabase.from('flota_ticket_archivos').insert({
+            ticket_id: nuevo.id, archivo_path: ruta, creado_por: flotaPerfil.perfil_id,
+          });
+        }
       }
       setModal(false); cargar();
     } catch (err) {
@@ -214,17 +225,21 @@ export default function Tickets() {
 
   async function abrirDetalle(row) {
     setDetalle(row); setCorreoHref(null); setArchivoCierre(null);
-    setHistorialServ([]);
+    setHistorialServ([]); setDetalleArchivos([]);
     if (row._origen === 'ticket') {
       setEstatusEdit(row.estatus);
       setMotivoEdit(row.motivo_rechazo ?? '');
       setServicioRelacionado(row.relacionado_servicio_id ?? '');
       // Historial de servicios de esta unidad -- para decidir si rechazar
       // o procesar el ticket con informacion de lo que ya se le ha hecho.
-      const { data } = await supabase.from('flota_servicios')
-        .select('id, fecha, concepto, descripcion')
-        .eq('vehiculo_id', row.vehiculo_id).order('fecha', { ascending: false }).limit(15);
-      setHistorialServ(data ?? []);
+      const [serv, arch] = await Promise.all([
+        supabase.from('flota_servicios')
+          .select('id, fecha, concepto, descripcion')
+          .eq('vehiculo_id', row.vehiculo_id).order('fecha', { ascending: false }).limit(15),
+        supabase.from('flota_ticket_archivos').select('id, archivo_path').eq('ticket_id', row.id),
+      ]);
+      setHistorialServ(serv.data ?? []);
+      setDetalleArchivos(arch.data ?? []);
     } else {
       setMotivoEdit('');
     }
@@ -470,6 +485,26 @@ export default function Tickets() {
               <Campo label="Kilometraje actual" hint="Opcional — si lo das, se actualiza en la unidad al completar el ticket">
                 <Input type="number" min="0" step="1" value={form.kilometraje} onChange={(e) => setForm({ ...form, kilometraje: e.target.value })} />
               </Campo>
+              <Campo label="Archivos" hint="Fotos del problema, documentos — opcional, puedes agregar varios">
+                {form.archivos.length > 0 && (
+                  <ul className="mb-2 space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    {form.archivos.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2">
+                        <span>{f.name}</span>
+                        <button type="button"
+                                onClick={() => setForm({ ...form, archivos: form.archivos.filter((_, idx) => idx !== i) })}
+                                className="underline" style={{ color: 'var(--critical)' }}>
+                          Quitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <FotoOPdfInput value={archivoTemp} onChange={(f) => {
+                  if (f) { setForm({ ...form, archivos: [...form.archivos, f] }); }
+                  setArchivoTemp(null);
+                }} />
+              </Campo>
             </>
           )}
 
@@ -504,6 +539,19 @@ export default function Tickets() {
             </div>
             {detalle.kilometraje && (
               <div><div className="text-xs" style={{ color: 'var(--text-muted)' }}>Kilometraje reportado</div><div className="text-sm">{detalle.kilometraje}</div></div>
+            )}
+            {detalleArchivos.length > 0 && (
+              <div>
+                <div className="mb-1 text-xs" style={{ color: 'var(--text-muted)' }}>Archivos adjuntos</div>
+                <div className="flex flex-wrap gap-3">
+                  {detalleArchivos.map((a, i) => (
+                    <button key={a.id} type="button" onClick={() => verArchivoCierre(a.archivo_path)}
+                            className="text-xs underline" style={{ color: 'var(--series-1)' }}>
+                      Archivo {detalleArchivos.length > 1 ? i + 1 : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             {detalle.estatus === 'rechazado' && detalle.motivo_rechazo && (
               <Aviso tono="critical"><strong>Motivo de rechazo:</strong> {detalle.motivo_rechazo}</Aviso>
